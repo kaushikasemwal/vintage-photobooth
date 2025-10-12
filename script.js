@@ -230,18 +230,6 @@ function checkForNewParticipants() {
         `;
     }
 }
-    
-    localStorage.setItem(sessionKey, JSON.stringify(sessionData));
-    
-    // Count active participants (active within last 30 seconds)
-    const now = Date.now();
-    participantCount = Object.values(sessionData).filter(user => 
-        (now - user.lastActive) < 30000
-    ).length;
-    
-    // Update UI
-    updateCollaborationUI();
-}
 
 // Check for new photos from friends
 function checkForNewPhotos() {
