@@ -77,17 +77,25 @@ Firebase Storage CORS must be configured via Google Cloud Console because Fireba
 
 5. **Apply CORS Configuration:**
    
-   Replace `YOUR-BUCKET-NAME` with your actual bucket name (check the Storage page for the exact name):
+   Try the standard bucket name first:
+   
+   ```bash
+   gsutil cors set cors.json gs://vintage-photobooth.appspot.com
+   ```
+   
+   **If you get "404 bucket does not exist", try the alternative name:**
    
    ```bash
    gsutil cors set cors.json gs://vintage-photobooth.firebasestorage.app
    ```
    
-   **OR** if your bucket name is different:
+   **Still not working? List all buckets to find the correct name:**
    
    ```bash
-   gsutil cors set cors.json gs://vintage-photobooth.appspot.com
+   gsutil ls
    ```
+   
+   Then use the bucket name that appears in the list.
 
 6. **Verify CORS Configuration:**
    

@@ -1,0 +1,17 @@
+# Node modules (not needed - using CDN)
+node_modules/
+package-lock.json
+
+# Test files
+deployment-check.html
+firebase-test.html
+
+# IDE and system files
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+
+# Environment files
+.env
+.env.local

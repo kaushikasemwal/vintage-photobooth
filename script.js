@@ -477,7 +477,18 @@ function updateCollaborativeUI() {
         }
         
         statusHTML += `</small>`;
-        sessionCodeDisplay.innerHTML = statusHTML;
+        
+        const sessionCodeText = document.getElementById('sessionCodeText');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+        
+        if (sessionCodeText) {
+            sessionCodeText.innerHTML = statusHTML;
+        }
+        
+        // Show copy button for host
+        if (copyCodeBtn && isHost) {
+            copyCodeBtn.style.display = 'inline-block';
+        }
     }
 }
 
@@ -1882,19 +1893,49 @@ document.getElementById('createCollabBtn').addEventListener('click', () => {
             console.log('✅ Old session data cleared');
             // Now initialize the fresh session
             initializeFirebaseSession(currentSession, true); // Pass true to mark as host
-            sessionCodeDisplay.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+            
+            const sessionCodeText = document.getElementById('sessionCodeText');
+            const copyCodeBtn = document.getElementById('copyCodeBtn');
+            
+            if (sessionCodeText) {
+                sessionCodeText.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+            }
+            if (copyCodeBtn) {
+                copyCodeBtn.style.display = 'inline-block';
+            }
+            
             showScreen(cameraAccessScreen);
         }).catch((error) => {
             console.warn('⚠️ Could not clear old session:', error);
             // Continue anyway with fresh session
             initializeFirebaseSession(currentSession, true);
-            sessionCodeDisplay.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+            
+            const sessionCodeText = document.getElementById('sessionCodeText');
+            const copyCodeBtn = document.getElementById('copyCodeBtn');
+            
+            if (sessionCodeText) {
+                sessionCodeText.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+            }
+            if (copyCodeBtn) {
+                copyCodeBtn.style.display = 'inline-block';
+            }
+            
             showScreen(cameraAccessScreen);
         });
     } else {
         // Firebase not available, proceed normally
         initializeFirebaseSession(currentSession, true);
-        sessionCodeDisplay.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+        
+        const sessionCodeText = document.getElementById('sessionCodeText');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+        
+        if (sessionCodeText) {
+            sessionCodeText.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+        }
+        if (copyCodeBtn) {
+            copyCodeBtn.style.display = 'inline-block';
+        }
+        
         showScreen(cameraAccessScreen);
     }
 });
@@ -1903,7 +1944,17 @@ document.getElementById('joinSessionBtn').addEventListener('click', () => {
     const code = document.getElementById('sessionCodeInput').value.toUpperCase();
     if (code.length === 6) {
         initializeFirebaseSession(code, false); // Pass false for participants
-        sessionCodeDisplay.innerHTML = `Joining session: <strong>${code}</strong>`;
+        
+        const sessionCodeText = document.getElementById('sessionCodeText');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+        
+        if (sessionCodeText) {
+            sessionCodeText.innerHTML = `Joining session: <strong>${code}</strong>`;
+        }
+        if (copyCodeBtn) {
+            copyCodeBtn.style.display = 'none'; // Hide copy button for participants
+        }
+        
         showScreen(cameraAccessScreen);
     } else {
         alert('Please enter a valid 6-character session code');
@@ -1958,6 +2009,69 @@ document.getElementById('viewGalleryBtn').addEventListener('click', () => {
 document.getElementById('backFromGalleryBtn').addEventListener('click', () => {
     showScreen(welcomeScreen);
 });
+
+// Copy session code to clipboard
+document.getElementById('copyCodeBtn').addEventListener('click', async () => {
+    const copyBtn = document.getElementById('copyCodeBtn');
+    const sessionCode = currentSession;
+    
+    if (!sessionCode) {
+        alert('No session code to copy');
+        return;
+    }
+    
+    try {
+        // Try modern clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(sessionCode);
+            
+            // Visual feedback
+            const originalText = copyBtn.innerHTML;
+            copyBtn.innerHTML = '✅ Copied!';
+            copyBtn.classList.add('copied');
+            
+            setTimeout(() => {
+                copyBtn.innerHTML = originalText;
+                copyBtn.classList.remove('copied');
+            }, 2000);
+            
+            console.log('📋 Session code copied:', sessionCode);
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = sessionCode;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                
+                // Visual feedback
+                const originalText = copyBtn.innerHTML;
+                copyBtn.innerHTML = '✅ Copied!';
+                copyBtn.classList.add('copied');
+                
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalText;
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+                
+                console.log('📋 Session code copied (fallback):', sessionCode);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy. Code: ' + sessionCode);
+            }
+            
+            document.body.removeChild(textArea);
+        }
+    } catch (err) {
+        console.error('Failed to copy session code:', err);
+        alert('Failed to copy. Session code: ' + sessionCode);
+    }
+});
+
 
 document.getElementById('clearGalleryBtn').addEventListener('click', async () => {
     if (confirm('Are you sure you want to clear your entire gallery?')) {
