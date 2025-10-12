@@ -194,6 +194,42 @@ body {
     color: #6b4423;
 }
 
+/* Collaboration Status */
+.collaboration-status {
+    background: rgba(196, 167, 71, 0.15);
+    border: 2px solid #c4a747;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px 0;
+    font-family: 'Libre Baskerville', serif;
+}
+
+.session-participants {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+    color: #6b4423;
+}
+
+.recent-activity {
+    font-size: 0.8em;
+    color: #8b6914;
+    font-style: italic;
+    text-align: center;
+    min-height: 20px;
+}
+
+.activity-item {
+    padding: 2px 0;
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 .lighting-indicator {
     display: inline-flex;
     align-items: center;
@@ -466,4 +502,67 @@ body {
         font-size: 1.1em;
         padding: 15px 40px;
     }
+}
+
+/* Real-time Collaboration Notifications */
+.shared-photo-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #c4a667 0%, #8b6914 100%);
+    color: #f5f0e8;
+    padding: 15px 25px;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    z-index: 10000;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    max-width: 300px;
+}
+
+.shared-photo-notification.show {
+    transform: translateX(0);
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1em;
+}
+
+/* Enhanced Session Display */
+.session-code-display {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1em;
+    color: #8b6914;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(196, 167, 71, 0.2);
+    border-radius: 10px;
+    border: 2px solid #c4a747;
+}
+
+.session-code-display strong {
+    font-size: 1.3em;
+    letter-spacing: 3px;
+    color: #6b4423;
+}
+
+.session-code-display small {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.9em;
+    color: #8b6914;
+}
+
+/* Collaborative photo count */
+.photo-count small {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.9em;
+    color: #c4a667;
+    font-style: italic;
 }

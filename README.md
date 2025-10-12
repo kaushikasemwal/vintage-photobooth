@@ -2,7 +2,7 @@
 
 A charming web-based vintage photo booth that captures your memories with classic film filters and customizable photo strips. Create stunning vintage-style photo strips right in your browser!
 
-## 🎭 [Live Demo](https://kaushikasemwal.github.io/vintage-photobooth)
+## 🎭 [Live Demo](https://kaushikasemwal.github.io/vintage-photobooth/)
 
 *Your PhotoBooth will be live at this URL once GitHub Pages is enabled*
 

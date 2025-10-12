@@ -29,6 +29,298 @@ let voiceEnabled = true;
 let animationId = null;
 let lightingIntervalId = null;
 
+// Collaboration variables - Firebase powered
+let participantCount = 1;
+let sessionPhotos = [];
+let userId = 'user_' + Math.random().toString(36).substr(2, 9);
+let userName = 'Guest_' + Math.random().toString(36).substr(2, 4);
+let sessionRef = null;
+let connectedUsers = {};
+
+// Firebase collaboration functions
+function initializeFirebaseSession(sessionCode) {
+    if (!window.firebase || !database) {
+        console.log('Firebase not available, using local storage fallback');
+        return initializeLocalSession(sessionCode);
+    }
+    
+    currentSession = sessionCode;
+    sessionRef = database.ref('sessions/' + sessionCode);
+    
+    // Add this user to the session
+    const userRef = sessionRef.child('users/' + userId);
+    userRef.set({
+        name: userName,
+        joinedAt: firebase.database.ServerValue.TIMESTAMP,
+        lastActive: firebase.database.ServerValue.TIMESTAMP,
+        photoCount: 0,
+        currentFilter: currentFilter
+    });
+    
+    // Listen for other users joining/leaving
+    sessionRef.child('users').on('value', (snapshot) => {
+        connectedUsers = snapshot.val() || {};
+        updateParticipantDisplay();
+    });
+    
+    // Listen for shared photos
+    sessionRef.child('photos').on('child_added', (snapshot) => {
+        const photoData = snapshot.val();
+        if (photoData.userId !== userId) {
+            // Someone else took a photo!
+            addSharedPhotoToSession(photoData);
+        }
+    });
+    
+    // Keep connection alive
+    userRef.child('lastActive').onDisconnect().remove();
+    setInterval(() => {
+        userRef.child('lastActive').set(firebase.database.ServerValue.TIMESTAMP);
+    }, 5000);
+}
+
+function sharePhotoWithSession(photoDataUrl) {
+    if (!sessionRef || !currentSession) return;
+    
+    // Add photo to Firebase session
+    const photoRef = sessionRef.child('photos').push();
+    photoRef.set({
+        userId: userId,
+        userName: userName,
+        photoData: photoDataUrl,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        filter: currentFilter
+    });
+    
+    // Update user's photo count
+    sessionRef.child('users/' + userId + '/photoCount').set(photos.length);
+}
+
+function addSharedPhotoToSession(photoData) {
+    sessionPhotos.push(photoData);
+    showSharedPhotoNotification(photoData.userName);
+    updateCollaborativeUI();
+}
+
+function showSharedPhotoNotification(userName) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'shared-photo-notification';
+    notification.innerHTML = `
+        <div class="notification-content">
+            📸 ${userName} just took a photo!
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => notification.classList.add('show'), 100);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+    
+    speak(`${userName} just took a photo!`, true);
+}
+
+function updateParticipantDisplay() {
+    const userCount = Object.keys(connectedUsers).length;
+    participantCount = userCount;
+    
+    // Update session display
+    const sessionDisplay = document.getElementById('sessionCodeDisplay');
+    if (sessionDisplay && currentSession) {
+        const userNames = Object.values(connectedUsers).map(user => user.name).join(', ');
+        sessionDisplay.innerHTML = `
+            <strong>Session: ${currentSession}</strong><br>
+            <small>👥 ${userCount} participant(s): ${userNames}</small>
+        `;
+    }
+}
+
+function updateCollaborativeUI() {
+    // Update photo count display to include shared photos
+    const totalSharedPhotos = sessionPhotos.length;
+    if (totalSharedPhotos > 0) {
+        const photoCountEl = document.getElementById('photoCount');
+        if (photoCountEl) {
+            photoCountEl.innerHTML += `<br><small>📤 ${totalSharedPhotos} shared photos</small>`;
+        }
+    }
+}
+
+// Fallback local storage collaboration (original code)
+function initializeLocalSession(sessionCode) {
+// Fallback local storage collaboration (original code)
+function initializeLocalSession(sessionCode) {
+    currentSession = sessionCode;
+    updateSessionData();
+    
+    // Check for other participants periodically
+    setInterval(() => {
+        updateSessionData();
+        checkForNewParticipants();
+    }, 2000);
+}
+
+function updateSessionData() {
+    if (!currentSession) return;
+    
+    const sessionKey = 'collab_session_' + currentSession;
+    let sessionData = JSON.parse(localStorage.getItem(sessionKey) || '{}');
+    
+    // Update this user's data
+    sessionData[userId] = {
+        lastActive: Date.now(),
+        photoCount: photos.length,
+        filter: currentFilter,
+        name: userName
+    };
+    
+    localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+}
+
+function checkForNewParticipants() {
+    if (!currentSession) return;
+    
+    const sessionKey = 'collab_session_' + currentSession;
+    let sessionData = JSON.parse(localStorage.getItem(sessionKey) || '{}');
+    
+    // Count active participants (last active within 30 seconds)
+    const now = Date.now();
+    const activeUsers = Object.entries(sessionData).filter(([id, data]) => 
+        now - data.lastActive < 30000
+    );
+    
+    participantCount = activeUsers.length;
+    
+    // Update display
+    const sessionDisplay = document.getElementById('sessionCodeDisplay');
+    if (sessionDisplay && currentSession) {
+        const userNames = activeUsers.map(([id, data]) => data.name || 'Guest').join(', ');
+        sessionDisplay.innerHTML = `
+            <strong>Session: ${currentSession}</strong><br>
+            <small>👥 ${participantCount} participant(s): ${userNames}</small>
+        `;
+    }
+}
+    
+    localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+    
+    // Count active participants (active within last 30 seconds)
+    const now = Date.now();
+    participantCount = Object.values(sessionData).filter(user => 
+        (now - user.lastActive) < 30000
+    ).length;
+    
+    // Update UI
+    updateCollaborationUI();
+}
+
+// Share photo with session
+function sharePhotoWithSession(photoData) {
+    if (!currentSession) return;
+    
+    const sessionPhotosKey = 'collab_photos_' + currentSession;
+    let sharedPhotos = JSON.parse(localStorage.getItem(sessionPhotosKey) || '[]');
+    
+    sharedPhotos.push({
+        userId: userId,
+        photoData: photoData,
+        timestamp: Date.now(),
+        filter: currentFilter
+    });
+    
+    localStorage.setItem(sessionPhotosKey, JSON.stringify(sharedPhotos));
+    sessionPhotos = sharedPhotos;
+    
+    showActivity('You shared a photo! 📸');
+    updateCollaborationUI();
+}
+
+// Check for new photos from friends
+function checkForNewPhotos() {
+    if (!currentSession) return;
+    
+    const sessionPhotosKey = 'collab_photos_' + currentSession;
+    const allPhotos = JSON.parse(localStorage.getItem(sessionPhotosKey) || '[]');
+    
+    // Find new photos from other users
+    const newPhotos = allPhotos.filter(photo => 
+        photo.userId !== userId && 
+        !sessionPhotos.find(existing => 
+            existing.userId === photo.userId && 
+            existing.timestamp === photo.timestamp
+        )
+    );
+    
+    if (newPhotos.length > 0) {
+        newPhotos.forEach(photo => {
+            showActivity('Friend shared a photo! 📸');
+        });
+        sessionPhotos = allPhotos;
+        updateCollaborationUI();
+    }
+}
+
+// Show activity messages
+function showActivity(message) {
+    const activityEl = document.getElementById('recentActivity');
+    if (!activityEl) return;
+
+    const activityItem = document.createElement('div');
+    activityItem.className = 'activity-item';
+    activityItem.textContent = message;
+    activityEl.appendChild(activityItem);
+    
+    // Remove old items
+    while (activityEl.children.length > 2) {
+        activityEl.removeChild(activityEl.firstChild);
+    }
+    
+    // Auto-clear
+    setTimeout(() => {
+        if (activityItem.parentNode) {
+            activityItem.parentNode.removeChild(activityItem);
+        }
+    }, 3000);
+}
+
+// Update collaboration UI
+function updateCollaborationUI() {
+    const collaborationStatus = document.getElementById('collaborationStatus');
+    const participantCountEl = document.getElementById('participantCount');
+    const sessionPhotosEl = document.getElementById('sessionPhotos');
+    
+    if (!collaborationStatus) return;
+
+    if (currentSession) {
+        collaborationStatus.style.display = 'block';
+        participantCountEl.textContent = `👥 ${participantCount} participant${participantCount !== 1 ? 's' : ''}`;
+        sessionPhotosEl.textContent = `📸 ${sessionPhotos.length} photos shared`;
+    } else {
+        collaborationStatus.style.display = 'none';
+    }
+}
+
+// Start collaboration monitoring
+function startCollaboration() {
+    if (!currentSession) return;
+    
+    // Update session data every 10 seconds
+    setInterval(updateSessionData, 10000);
+    
+    // Check for new photos every 5 seconds
+    setInterval(checkForNewPhotos, 5000);
+    
+    // Initial update
+    updateSessionData();
+    updateCollaborationUI();
+}
+
 // Performance optimization: throttle filter updates
 const FILTER_THROTTLE = 50; // ms
 let lastFilterTime = 0;
@@ -403,6 +695,11 @@ function takePhoto() {
     photos.push(photoData);
     saveToGallery(photoData);
     
+    // Share with collaborative session
+    if (currentSession) {
+        sharePhotoWithSession(photoData);
+    }
+    
     // Show flash effect
     showFlash();
     
@@ -724,6 +1021,7 @@ document.getElementById('startSoloBtn').addEventListener('click', () => {
 
 document.getElementById('createCollabBtn').addEventListener('click', () => {
     currentSession = generateSessionCode();
+    initializeFirebaseSession(currentSession);
     sessionCodeDisplay.innerHTML = `Share this code with friends: <strong>${currentSession}</strong>`;
     showScreen(cameraAccessScreen);
 });
@@ -731,8 +1029,8 @@ document.getElementById('createCollabBtn').addEventListener('click', () => {
 document.getElementById('joinSessionBtn').addEventListener('click', () => {
     const code = document.getElementById('sessionCodeInput').value.toUpperCase();
     if (code.length === 6) {
-        currentSession = code;
-        sessionCodeDisplay.innerHTML = `Connected to session: <strong>${currentSession}</strong>`;
+        initializeFirebaseSession(code);
+        sessionCodeDisplay.innerHTML = `Joining session: <strong>${code}</strong>`;
         showScreen(cameraAccessScreen);
     } else {
         alert('Please enter a valid 6-character session code');
