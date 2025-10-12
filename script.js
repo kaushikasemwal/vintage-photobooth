@@ -36,9 +36,11 @@ let userId = 'user_' + Math.random().toString(36).substr(2, 9);
 let userName = 'Guest_' + Math.random().toString(36).substr(2, 4);
 let sessionRef = null;
 let connectedUsers = {};
+let isHost = false; // Track if this user is the session host
+let hostId = null; // Store the host's user ID
 
 // Firebase collaboration functions
-function initializeFirebaseSession(sessionCode) {
+function initializeFirebaseSession(sessionCode, asHost = false) {
     console.log('🔥 Initializing Firebase session:', sessionCode);
     console.log('Firebase available:', !!window.firebase);
     console.log('Database available:', !!database);
@@ -51,6 +53,37 @@ function initializeFirebaseSession(sessionCode) {
     
     currentSession = sessionCode;
     sessionRef = database.ref('sessions/' + sessionCode);
+    isHost = asHost;
+    
+    // Check if session already exists to determine host
+    sessionRef.once('value').then((snapshot) => {
+        const sessionData = snapshot.val();
+        
+        if (!sessionData || !sessionData.hostId) {
+            // This is a new session or no host set - make this user the host
+            isHost = true;
+            hostId = userId;
+            sessionRef.child('hostId').set(userId);
+            sessionRef.child('hostName').set(userName);
+            console.log('👑 You are the session host!');
+        } else {
+            // Session exists, get host info
+            hostId = sessionData.hostId;
+            isHost = (hostId === userId);
+            console.log(isHost ? '👑 You are the session host!' : '👥 You joined as participant');
+        }
+        
+        updateHostControls();
+    });
+    
+    // Listen for host control commands
+    sessionRef.child('commands').on('child_added', (snapshot) => {
+        const command = snapshot.val();
+        if (!isHost && command.type === 'capture') {
+            console.log('📸 Host initiated photo capture!');
+            handleHostCommand(command);
+        }
+    });
     
     // Add this user to the session
     const userRef = sessionRef.child('users/' + userId);
@@ -59,7 +92,8 @@ function initializeFirebaseSession(sessionCode) {
         joinedAt: firebase.database.ServerValue.TIMESTAMP,
         lastActive: firebase.database.ServerValue.TIMESTAMP,
         photoCount: 0,
-        currentFilter: currentFilter
+        currentFilter: currentFilter,
+        isHost: isHost
     });
     
     // Listen for other users joining/leaving
@@ -174,6 +208,227 @@ function updateCollaborativeUI() {
         if (photoCountEl) {
             photoCountEl.innerHTML += `<br><small>📤 ${totalSharedPhotos} shared photos</small>`;
         }
+    }
+}
+
+// Host control functions
+function updateHostControls() {
+    const captureBtn = document.getElementById('captureBtn');
+    if (!captureBtn) return;
+    
+    if (!currentSession) {
+        // Solo mode - normal capture
+        captureBtn.textContent = 'Take Photos';
+        captureBtn.disabled = false;
+    } else if (isHost) {
+        // Host mode - can capture for everyone
+        captureBtn.textContent = '👑 Capture All (Host)';
+        captureBtn.disabled = false;
+    } else {
+        // Participant mode - wait for host
+        captureBtn.textContent = '⏳ Waiting for Host...';
+        captureBtn.disabled = true;
+    }
+}
+
+function handleHostCommand(command) {
+    if (command.type === 'capture') {
+        // Host initiated a photo capture
+        showNotification('📸 Host is taking a group photo! Get ready!');
+        setTimeout(() => {
+            takePhoto();
+        }, 1000);
+    }
+}
+
+function sendHostCommand(commandType) {
+    if (!isHost || !sessionRef) return;
+    
+    sessionRef.child('commands').push({
+        type: commandType,
+        timestamp: firebase.database.ServerValue.TIMESTAMP,
+        hostId: userId
+    });
+}
+
+function showNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'shared-photo-notification';
+    notification.innerHTML = `
+        <div class="notification-content">
+            ${message}
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    setTimeout(() => notification.classList.add('show'), 100);
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+function createCollaborativeStrip() {
+    console.log('🎨 Creating collaborative strip with all photos');
+    
+    // Collect all photos from all users
+    const allCollabPhotos = [];
+    
+    // Add your own photos
+    photos.forEach(photo => {
+        allCollabPhotos.push({
+            data: photo,
+            userName: userName,
+            userId: userId
+        });
+    });
+    
+    // Add photos from other participants
+    sessionPhotos.forEach(photo => {
+        allCollabPhotos.push({
+            data: photo.photoData,
+            userName: photo.userName,
+            userId: photo.userId
+        });
+    });
+    
+    console.log(`📸 Total collaborative photos: ${allCollabPhotos.length}`);
+    
+    if (allCollabPhotos.length === 0) {
+        alert('No photos to create strip!');
+        return;
+    }
+    
+    // Create strip with all collaborative photos
+    createPhotoStripFromPhotos(allCollabPhotos);
+}
+
+function createPhotoStripFromPhotos(photoArray) {
+    const headerText = document.getElementById('headerText').value || 'COLLABORATIVE MEMORIES';
+    const layout = document.getElementById('layoutStyle').value;
+    const borderStyle = document.getElementById('borderStyle').value;
+    const numPhotos = photoArray.length;
+    
+    let stripWidth, photoWidth, photoHeight, stripHeight, columns, rows;
+    const spacing = 15;
+    const headerHeight = 70;
+    const footerHeight = 70; // Increased for participant names
+    
+    // Configure layout dimensions
+    if (layout === 'wide' || layout === 'postcard') {
+        columns = Math.min(4, numPhotos);
+        rows = Math.ceil(numPhotos / columns);
+        
+        if (layout === 'wide') {
+            stripWidth = 800;
+            photoWidth = Math.floor((stripWidth - (spacing * (columns + 1))) / columns);
+            photoHeight = Math.floor(photoWidth * 0.75);
+        } else {
+            stripWidth = 900;
+            photoWidth = Math.floor((stripWidth - (spacing * (columns + 1))) / columns);
+            photoHeight = Math.floor(photoWidth * 0.75);
+        }
+    } else {
+        // Classic vertical layout
+        stripWidth = 400;
+        photoWidth = 370;
+        photoHeight = 280;
+        columns = 1;
+        rows = numPhotos;
+    }
+    
+    stripHeight = headerHeight + (photoHeight * rows) + (spacing * (rows + 1)) + footerHeight;
+    
+    stripCanvas.width = stripWidth;
+    stripCanvas.height = stripHeight;
+    
+    // Background
+    stripCtx.fillStyle = '#faf8f5';
+    stripCtx.fillRect(0, 0, stripWidth, stripHeight);
+    
+    // Apply border (reuse existing border code)
+    applyStripBorder(borderStyle, stripWidth, stripHeight);
+    
+    // Header
+    stripCtx.fillStyle = '#6b4423';
+    stripCtx.font = 'bold 28px "Playfair Display", serif';
+    stripCtx.textAlign = 'center';
+    stripCtx.fillText(headerText, stripWidth / 2, 45);
+    
+    // Draw photos
+    let loadedPhotos = 0;
+    photoArray.forEach((photoObj, i) => {
+        const img = new Image();
+        img.src = photoObj.data;
+        img.onload = () => {
+            let xPos, yPos;
+            
+            if (columns === 1) {
+                xPos = (stripWidth - photoWidth) / 2;
+                yPos = headerHeight + spacing + (i * (photoHeight + spacing));
+            } else {
+                const col = i % columns;
+                const row = Math.floor(i / columns);
+                const totalPhotoWidth = (photoWidth * columns) + (spacing * (columns - 1));
+                const startX = (stripWidth - totalPhotoWidth) / 2;
+                
+                xPos = startX + (col * (photoWidth + spacing));
+                yPos = headerHeight + spacing + (row * (photoHeight + spacing));
+            }
+            
+            stripCtx.drawImage(img, xPos, yPos, photoWidth, photoHeight);
+            stripCtx.strokeStyle = '#3e2723';
+            stripCtx.lineWidth = 2;
+            stripCtx.strokeRect(xPos, yPos, photoWidth, photoHeight);
+            
+            // Add participant name under photo
+            stripCtx.font = '10px "Libre Baskerville", serif';
+            stripCtx.fillStyle = '#8b6914';
+            stripCtx.fillText(photoObj.userName, xPos + photoWidth/2, yPos + photoHeight + 12);
+            
+            loadedPhotos++;
+            
+            if (loadedPhotos === photoArray.length) {
+                // Footer with date and session info
+                const date = new Date().toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                stripCtx.font = 'italic 16px "Libre Baskerville", serif';
+                stripCtx.fillStyle = '#8b6914';
+                stripCtx.textAlign = 'center';
+                stripCtx.fillText(date, stripWidth / 2, stripHeight - 40);
+                
+                stripCtx.font = '12px "Libre Baskerville", serif';
+                stripCtx.fillText(`Collaborative Session: ${currentSession}`, stripWidth / 2, stripHeight - 20);
+                
+                // Get unique participant names
+                const participants = [...new Set(photoArray.map(p => p.userName))];
+                stripCtx.font = '10px "Libre Baskerville", serif';
+                stripCtx.fillText(`With: ${participants.join(', ')}`, stripWidth / 2, stripHeight - 5);
+                
+                showScreen(resultsScreen);
+                
+                // Hide regular collaborative button when showing collaborative strip
+                document.getElementById('createCollabStripBtn').style.display = 'none';
+            }
+        };
+    });
+}
+
+function applyStripBorder(borderStyle, stripWidth, stripHeight) {
+    if (borderStyle === 'ornate') {
+        stripCtx.strokeStyle = '#8b6914';
+        stripCtx.lineWidth = 8;
+        stripCtx.strokeRect(10, 10, stripWidth - 20, stripHeight - 20);
+        stripCtx.strokeStyle = '#c4a747';
+        stripCtx.lineWidth = 3;
+        stripCtx.strokeRect(15, 15, stripWidth - 30, stripHeight - 30);
+    } else if (borderStyle === 'simple') {
+        stripCtx.strokeStyle = '#8b6914';
+        stripCtx.lineWidth = 4;
+        stripCtx.strokeRect(12, 12, stripWidth - 24, stripHeight - 24);
     }
 }
 
@@ -701,6 +956,12 @@ async function startPhotoSequence() {
     console.log('Starting photo sequence...');
     photos = [];
     
+    // If in collaborative session and user is host, send command to all participants
+    if (currentSession && isHost) {
+        sendHostCommand('capture');
+        showNotification('📸 Capturing group photo! Everyone smile!');
+    }
+    
     // Get selected number of photos
     const photoCountElement = document.getElementById('photoCountSelect');
     totalPhotos = parseInt(photoCountElement.value);
@@ -950,6 +1211,14 @@ function createPhotoStrip() {
                 }
                 
                 showScreen(resultsScreen);
+                
+                // Show collaborative strip button if in a session
+                const collabStripBtn = document.getElementById('createCollabStripBtn');
+                if (currentSession && sessionPhotos.length > 0) {
+                    collabStripBtn.style.display = 'inline-block';
+                } else {
+                    collabStripBtn.style.display = 'none';
+                }
             }
         };
     });
@@ -1011,15 +1280,15 @@ document.getElementById('startSoloBtn').addEventListener('click', () => {
 
 document.getElementById('createCollabBtn').addEventListener('click', () => {
     currentSession = generateSessionCode();
-    initializeFirebaseSession(currentSession);
-    sessionCodeDisplay.innerHTML = `Share this code with friends: <strong>${currentSession}</strong>`;
+    initializeFirebaseSession(currentSession, true); // Pass true to mark as host
+    sessionCodeDisplay.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
     showScreen(cameraAccessScreen);
 });
 
 document.getElementById('joinSessionBtn').addEventListener('click', () => {
     const code = document.getElementById('sessionCodeInput').value.toUpperCase();
     if (code.length === 6) {
-        initializeFirebaseSession(code);
+        initializeFirebaseSession(code, false); // Pass false for participants
         sessionCodeDisplay.innerHTML = `Joining session: <strong>${code}</strong>`;
         showScreen(cameraAccessScreen);
     } else {
@@ -1031,6 +1300,10 @@ document.getElementById('enableCameraBtn').addEventListener('click', initCamera)
 document.getElementById('captureBtn').addEventListener('click', startPhotoSequence);
 document.getElementById('downloadBtn').addEventListener('click', downloadStrip);
 document.getElementById('downloadAllBtn').addEventListener('click', downloadAllPhotos);
+document.getElementById('createCollabStripBtn').addEventListener('click', async () => {
+    console.log('Creating collaborative strip...');
+    await createCollaborativeStrip();
+});
 document.getElementById('newSessionBtn').addEventListener('click', resetSession);
 document.getElementById('backToWelcomeBtn').addEventListener('click', resetSession);
 

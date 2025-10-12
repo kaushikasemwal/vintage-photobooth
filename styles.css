@@ -145,6 +145,23 @@ body {
     background: linear-gradient(135deg, #9b7924 0%, #7b5433 100%);
 }
 
+.btn-collab {
+    background: linear-gradient(135deg, #d4af37 0%, #8b6914 100%);
+    font-size: 1.2em;
+    padding: 15px 40px;
+    animation: pulse-glow 2s infinite;
+}
+
+.btn-collab:hover {
+    background: linear-gradient(135deg, #e4bf47 0%, #9b7924 100%);
+    transform: scale(1.05);
+}
+
+@keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 10px rgba(212, 175, 55, 0.5); }
+    50% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.8); }
+}
+
 /* Join Session */
 .join-session {
     margin-top: 30px;
