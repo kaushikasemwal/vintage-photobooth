@@ -319,6 +319,29 @@ function initializeFirebaseSession(sessionCode, asHost = false) {
         }
     });
     
+    // Listen for collaborative strip being created
+    sessionRef.child('collaborativeStrip').on('value', (snapshot) => {
+        const stripData = snapshot.val();
+        if (stripData && stripData.createdBy !== userId) {
+            console.log('🎨 Collaborative strip created by:', stripData.createdByName);
+            // Load and display the collaborative strip
+            showSharedCollaborativeStrip(stripData);
+        }
+    });
+    
+    // Listen for session end
+    sessionRef.child('sessionEnded').on('value', (snapshot) => {
+        const endData = snapshot.val();
+        if (endData && endData.endedBy !== userId) {
+            console.log('🏁 Session ended by:', endData.endedByName);
+            showNotification(`🏁 ${endData.endedByName} ended the session`);
+            // Give user time to see the notification and download if needed
+            setTimeout(() => {
+                resetSession();
+            }, 3000);
+        }
+    });
+    
     // Keep connection alive
     userRef.child('lastActive').onDisconnect().remove();
     setInterval(() => {
@@ -387,6 +410,35 @@ function showSharedPhotoNotification(userName) {
     }, 3000);
     
     speak(`${userName} just took a photo!`, true);
+}
+
+function showSharedCollaborativeStrip(stripData) {
+    console.log('🎨 Displaying shared collaborative strip');
+    showNotification(`🎉 ${stripData.createdByName} created the collaborative strip!`);
+    
+    // Load the strip image onto canvas
+    const img = new Image();
+    img.src = stripData.stripData;
+    img.onload = () => {
+        stripCanvas.width = img.width;
+        stripCanvas.height = img.height;
+        stripCtx.clearRect(0, 0, stripCanvas.width, stripCanvas.height);
+        stripCtx.drawImage(img, 0, 0);
+        
+        // Show results screen with the collaborative strip
+        showScreen(resultsScreen);
+        
+        // Hide collab button, show solo strip button if available
+        document.getElementById('createCollabStripBtn').style.display = 'none';
+        if (soloStripDataUrl) {
+            document.getElementById('viewSoloStripBtn').style.display = 'inline-block';
+        }
+        
+        // Show end session button
+        if (currentSession) {
+            document.getElementById('endSessionBtn').style.display = 'inline-block';
+        }
+    };
 }
 
 function updateParticipantDisplay() {
@@ -686,12 +738,36 @@ function createPhotoStripFromPhotos(photoArray) {
                 
                 showScreen(resultsScreen);
                 
+                // Save collaborative strip data URL
+                const collabStripDataUrl = stripCanvas.toDataURL('image/jpeg', 0.95);
+                
+                // Share collaborative strip with all participants via Firebase
+                if (sessionRef && currentSession) {
+                    sessionRef.child('collaborativeStrip').set({
+                        stripData: collabStripDataUrl,
+                        createdBy: userId,
+                        createdByName: userName,
+                        timestamp: firebase.database.ServerValue.TIMESTAMP,
+                        participants: participants
+                    }).then(() => {
+                        console.log('✅ Collaborative strip shared with all participants');
+                        showNotification('🎉 Collaborative strip created and shared with everyone!');
+                    }).catch((error) => {
+                        console.error('❌ Failed to share collaborative strip:', error);
+                    });
+                }
+                
                 // Hide regular collaborative button when showing collaborative strip
                 document.getElementById('createCollabStripBtn').style.display = 'none';
                 
                 // Show "View My Solo Strip" button if we have a solo strip saved
                 if (soloStripDataUrl) {
                     document.getElementById('viewSoloStripBtn').style.display = 'inline-block';
+                }
+                
+                // Show "End Session" button in collaborative mode
+                if (currentSession) {
+                    document.getElementById('endSessionBtn').style.display = 'inline-block';
                 }
             }
         };
@@ -918,9 +994,19 @@ function generateSessionCode() {
 
 // Gallery functions (with error handling)
 async function saveToGallery(photoData) {
+    console.log('💾 saveToGallery called');
+    console.log('   isGuest:', isGuest);
+    console.log('   currentUser:', currentUser ? 'exists' : 'null');
+    console.log('   currentUser.uid:', currentUser?.uid);
+    
     // Don't save for guests
     if (isGuest) {
         console.log('👤 Guest mode: Photo not saved to gallery');
+        return;
+    }
+    
+    if (!currentUser) {
+        console.log('⚠️ No current user - cannot save to gallery');
         return;
     }
     
@@ -930,6 +1016,8 @@ async function saveToGallery(photoData) {
             const photoId = Date.now();
             const photoRef = storage.ref(`users/${currentUser.uid}/gallery/${photoId}.jpg`);
             
+            console.log('📤 Uploading to Firebase Storage:', `users/${currentUser.uid}/gallery/${photoId}.jpg`);
+            
             // Convert data URL to blob
             const response = await fetch(photoData);
             const blob = await response.blob();
@@ -937,16 +1025,22 @@ async function saveToGallery(photoData) {
             // Upload to Firebase Storage
             await photoRef.put(blob);
             
+            console.log('✅ Blob uploaded successfully');
+            
+            // Get download URL
+            const downloadURL = await photoRef.getDownloadURL();
+            
             // Save metadata to Realtime Database
             await database.ref(`users/${currentUser.uid}/gallery/${photoId}`).set({
                 timestamp: firebase.database.ServerValue.TIMESTAMP,
                 session: currentSession,
-                downloadURL: await photoRef.getDownloadURL()
+                downloadURL: downloadURL
             });
             
-            console.log('✅ Photo saved to Firebase Storage');
+            console.log('✅ Photo saved to Firebase Storage and Database');
         } else {
             // Fallback to localStorage (should not happen with auth)
+            console.log('⚠️ Falling back to localStorage');
             let gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
             gallery.push({
                 id: Date.now(),
@@ -955,9 +1049,10 @@ async function saveToGallery(photoData) {
                 session: currentSession
             });
             localStorage.setItem('photoGallery', JSON.stringify(gallery));
+            console.log('✅ Photo saved to localStorage');
         }
     } catch (error) {
-        console.error('Failed to save to gallery:', error);
+        console.error('❌ Failed to save to gallery:', error);
         alert('Unable to save photo to gallery: ' + error.message);
     }
 }
@@ -1272,7 +1367,7 @@ function showFlash() {
 }
 
 // Take photo
-function takePhoto() {
+async function takePhoto() {
     // Make sure video is ready
     if (!video.videoWidth || !video.videoHeight) {
         console.error('Video not ready');
@@ -1298,7 +1393,13 @@ function takePhoto() {
     
     // Save the photo
     photos.push(photoData);
-    saveToGallery(photoData);
+    
+    // Save to gallery (await it to ensure it completes)
+    try {
+        await saveToGallery(photoData);
+    } catch (error) {
+        console.error('Error saving to gallery:', error);
+    }
     
     // Share with collaborative session
     if (currentSession) {
@@ -1399,23 +1500,29 @@ async function startPhotoSequence() {
     document.getElementById('captureBtn').disabled = false;
     
     if (photos.length > 0) {
-        // In collaborative mode, wait a bit for everyone's photos to sync, then show collaborative strip
+        // Always create solo strip first to save soloStripDataUrl
+        photoCount.textContent = 'Creating your strip...';
+        speak('Your photos are absolutely stunning, darling!', true);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Create solo strip (this saves soloStripDataUrl)
+        await new Promise((resolve) => {
+            createPhotoStrip();
+            // Give it a moment to render
+            setTimeout(resolve, 500);
+        });
+        
+        // In collaborative mode, auto-create and show collaborative strip
         if (currentSession && sessionPhotos.length > 0) {
-            photoCount.textContent = 'Waiting for all participants to finish...';
+            photoCount.textContent = 'Creating collaborative strip with everyone...';
             speak('Wonderful! Creating collaborative strip, darling!', true);
             
-            // Wait for other participants' photos to sync
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            // Wait for other participants' photos to fully sync
+            await new Promise(resolve => setTimeout(resolve, 2000));
             
             // Automatically create and show collaborative strip
             console.log('🎉 Auto-creating collaborative strip...');
             await createCollaborativeStrip();
-        } else {
-            // Solo mode or no collaborative photos yet - show solo strip
-            photoCount.textContent = 'Creating your gorgeous strip...';
-            speak('Your photos are absolutely stunning, darling!', true);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            createPhotoStrip();
         }
     } else {
         console.error('No photos were captured!');
@@ -1632,10 +1739,32 @@ function downloadAllPhotos() {
 
 // Reset (with proper cleanup)
 function resetSession() {
+    console.log('🔄 Resetting session...');
+    
+    // Clear all photo-related data
     photos = [];
+    sessionPhotos = [];
+    soloStripDataUrl = null;
     photoCount.textContent = '';
+    
+    // Clear session data
     currentSession = null;
     sessionCodeDisplay.textContent = '';
+    isHost = false;
+    hostId = null;
+    connectedUsers = {};
+    participantCount = 1;
+    
+    // Detach Firebase listeners if session exists
+    if (sessionRef) {
+        console.log('🗑️ Cleaning up Firebase listeners');
+        sessionRef.child('users').off();
+        sessionRef.child('photos').off();
+        sessionRef.child('commands').off();
+        sessionRef.child('collaborativeStrip').off();
+        sessionRef.child('sessionEnded').off();
+        sessionRef = null;
+    }
     
     // Cleanup resources
     if (animationId) {
@@ -1655,8 +1784,57 @@ function resetSession() {
     if (canvas.width > 0) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
+    if (stripCanvas.width > 0) {
+        stripCtx.clearRect(0, 0, stripCanvas.width, stripCanvas.height);
+    }
     
+    console.log('✅ Session reset complete');
     showScreen(welcomeScreen);
+}
+
+// End collaborative session - saves collaborative strip for logged-in users
+async function endCollaborativeSession() {
+    console.log('🏁 Ending collaborative session...');
+    
+    if (!currentSession) {
+        console.warn('No active session to end');
+        return;
+    }
+    
+    // Get the current collaborative strip from canvas
+    const collabStripDataUrl = stripCanvas.toDataURL('image/jpeg', 0.95);
+    
+    // Save to gallery for logged-in users (not guests)
+    if (currentUser && !isGuest) {
+        console.log('💾 Saving collaborative strip to gallery...');
+        try {
+            await saveToGallery(collabStripDataUrl);
+            showNotification('✅ Collaborative strip saved to your gallery!');
+        } catch (error) {
+            console.error('Failed to save to gallery:', error);
+            showNotification('❌ Failed to save to gallery');
+        }
+    } else {
+        showNotification('ℹ️ Guest mode - collaborative strip not saved to gallery');
+    }
+    
+    // Send end session command if host
+    if (isHost && sessionRef) {
+        console.log('📢 Broadcasting session end to all participants...');
+        sessionRef.child('sessionEnded').set({
+            endedBy: userId,
+            endedByName: userName,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
+    }
+    
+    // Show both strips to user before resetting
+    showNotification('🎉 Session ended! Your photos are ready.');
+    
+    // Wait a moment, then reset
+    setTimeout(() => {
+        resetSession();
+    }, 2000);
 }
 
 // Event listeners
@@ -1755,10 +1933,17 @@ document.getElementById('viewSoloStripBtn').addEventListener('click', () => {
             
             // Hide solo strip button, show collaborative strip button
             document.getElementById('viewSoloStripBtn').style.display = 'none';
+            document.getElementById('endSessionBtn').style.display = 'none';
             if (currentSession && sessionPhotos.length > 0) {
                 document.getElementById('createCollabStripBtn').style.display = 'inline-block';
             }
         };
+    }
+});
+
+document.getElementById('endSessionBtn').addEventListener('click', async () => {
+    if (confirm('End this collaborative session? The collaborative strip will be saved to your gallery (if logged in).')) {
+        await endCollaborativeSession();
     }
 });
 
