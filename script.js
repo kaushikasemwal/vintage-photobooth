@@ -179,8 +179,6 @@ function updateCollaborativeUI() {
 
 // Fallback local storage collaboration (original code)
 function initializeLocalSession(sessionCode) {
-// Fallback local storage collaboration (original code)
-function initializeLocalSession(sessionCode) {
     currentSession = sessionCode;
     updateSessionData();
     
@@ -242,27 +240,6 @@ function checkForNewParticipants() {
     ).length;
     
     // Update UI
-    updateCollaborationUI();
-}
-
-// Share photo with session
-function sharePhotoWithSession(photoData) {
-    if (!currentSession) return;
-    
-    const sessionPhotosKey = 'collab_photos_' + currentSession;
-    let sharedPhotos = JSON.parse(localStorage.getItem(sessionPhotosKey) || '[]');
-    
-    sharedPhotos.push({
-        userId: userId,
-        photoData: photoData,
-        timestamp: Date.now(),
-        filter: currentFilter
-    });
-    
-    localStorage.setItem(sessionPhotosKey, JSON.stringify(sharedPhotos));
-    sessionPhotos = sharedPhotos;
-    
-    showActivity('You shared a photo! 📸');
     updateCollaborationUI();
 }
 
