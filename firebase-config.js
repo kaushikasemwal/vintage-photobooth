@@ -19,3 +19,5 @@ firebase.initializeApp(firebaseConfig);
 const database = firebase.database();
 
 console.log('🔥 Firebase initialized for Vintage PhotoBooth collaboration');
+
+// Force redeploy: Syntax error fix applied
