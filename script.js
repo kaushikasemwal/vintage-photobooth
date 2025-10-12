@@ -481,6 +481,8 @@ function updateCollaborativeUI() {
         const sessionCodeText = document.getElementById('sessionCodeText');
         const copyCodeBtn = document.getElementById('copyCodeBtn');
         
+        console.log('🔍 updateSessionStatus called - isHost:', isHost);
+        
         if (sessionCodeText) {
             sessionCodeText.innerHTML = statusHTML;
         }
@@ -488,6 +490,9 @@ function updateCollaborativeUI() {
         // Show copy button for host
         if (copyCodeBtn && isHost) {
             copyCodeBtn.style.display = 'inline-block';
+            console.log('✅ Copy button shown in updateSessionStatus');
+        } else {
+            console.log('❌ Copy button NOT shown - isHost:', isHost, 'copyCodeBtn:', !!copyCodeBtn);
         }
     }
 }
@@ -1897,11 +1902,19 @@ document.getElementById('createCollabBtn').addEventListener('click', () => {
             const sessionCodeText = document.getElementById('sessionCodeText');
             const copyCodeBtn = document.getElementById('copyCodeBtn');
             
+            console.log('🔍 DEBUG - Creating session as HOST');
+            console.log('🔍 sessionCodeText element:', sessionCodeText);
+            console.log('🔍 copyCodeBtn element:', copyCodeBtn);
+            
             if (sessionCodeText) {
                 sessionCodeText.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+                console.log('✅ Session code text updated');
             }
             if (copyCodeBtn) {
                 copyCodeBtn.style.display = 'inline-block';
+                console.log('✅ Copy button made visible!');
+            } else {
+                console.error('❌ Copy button not found in DOM!');
             }
             
             showScreen(cameraAccessScreen);
