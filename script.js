@@ -465,7 +465,7 @@ function updateCollaborativeUI() {
     const sessionCodeDisplay = document.getElementById('sessionCodeDisplay');
     
     if (currentSession && sessionCodeDisplay) {
-        let statusHTML = `Connected to session: <strong>${currentSession}</strong>`;
+        let statusHTML; if (isHost) { statusHTML = ` You're the host! Share code: <strong>${currentSession}</strong>`; } else { statusHTML = `Connected to session: <strong>${currentSession}</strong>`; }
         statusHTML += `<br><small>� ${userCount}/${MAX_PARTICIPANTS} participants`;
         
         if (userCount >= MAX_PARTICIPANTS) {
