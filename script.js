@@ -1,4 +1,5 @@
 // Elements
+const loginScreen = document.getElementById('loginScreen');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const cameraAccessScreen = document.getElementById('cameraAccessScreen');
 const captureScreen = document.getElementById('captureScreen');
@@ -29,7 +30,14 @@ let voiceEnabled = true;
 let animationId = null;
 let lightingIntervalId = null;
 
+// Authentication variables
+let currentUser = null;
+let isGuest = false;
+let availableVoices = [];
+let selectedVoice = null;
+
 // Collaboration variables - Firebase powered
+const MAX_PARTICIPANTS = 4; // Maximum number of participants including host
 let participantCount = 1;
 let sessionPhotos = [];
 let userId = 'user_' + Math.random().toString(36).substr(2, 9);
@@ -38,6 +46,186 @@ let sessionRef = null;
 let connectedUsers = {};
 let isHost = false; // Track if this user is the session host
 let hostId = null; // Store the host's user ID
+
+// Authentication Functions
+function initAuth() {
+    console.log('🔐 Initializing authentication...');
+    
+    // Listen for auth state changes
+    auth.onAuthStateChanged((user) => {
+        if (user) {
+            currentUser = user;
+            isGuest = false;
+            userId = user.uid;
+            userName = user.displayName || user.email || 'User';
+            console.log('✅ User logged in:', userName);
+            showWelcomeScreen();
+        } else {
+            currentUser = null;
+            console.log('👤 No user logged in');
+        }
+    });
+}
+
+function showWelcomeScreen() {
+    loginScreen.style.display = 'none';
+    welcomeScreen.style.display = 'block';
+    
+    // Update user info display
+    const userInfo = document.getElementById('userInfo');
+    const userDisplayName = document.getElementById('userDisplayName');
+    
+    if (!isGuest && currentUser) {
+        userInfo.style.display = 'flex';
+        userDisplayName.textContent = currentUser.displayName || currentUser.email || 'User';
+    } else if (isGuest) {
+        userInfo.style.display = 'flex';
+        userDisplayName.textContent = '👤 Guest Mode (No Save)';
+    } else {
+        userInfo.style.display = 'none';
+    }
+}
+
+async function signInWithGoogle() {
+    try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        const result = await auth.signInWithPopup(provider);
+        console.log('✅ Google sign-in successful:', result.user.displayName);
+    } catch (error) {
+        console.error('❌ Google sign-in error:', error);
+        alert('Google sign-in failed: ' + error.message);
+    }
+}
+
+async function signInWithEmail(email, password) {
+    try {
+        const result = await auth.signInWithEmailAndPassword(email, password);
+        console.log('✅ Email sign-in successful:', result.user.email);
+    } catch (error) {
+        console.error('❌ Email sign-in error:', error);
+        alert('Sign-in failed: ' + error.message);
+    }
+}
+
+async function signUpWithEmail(email, password) {
+    if (password.length < 6) {
+        alert('Password must be at least 6 characters long');
+        return;
+    }
+    
+    try {
+        const result = await auth.createUserWithEmailAndPassword(email, password);
+        console.log('✅ Account created successfully:', result.user.email);
+    } catch (error) {
+        console.error('❌ Sign-up error:', error);
+        alert('Sign-up failed: ' + error.message);
+    }
+}
+
+function continueAsGuest() {
+    isGuest = true;
+    userId = 'guest_' + Math.random().toString(36).substr(2, 9);
+    userName = 'Guest_' + Math.random().toString(36).substr(2, 4);
+    console.log('👤 Continuing as guest:', userName);
+    showWelcomeScreen();
+}
+
+function logout() {
+    if (!isGuest) {
+        auth.signOut().then(() => {
+            console.log('👋 User logged out');
+            currentUser = null;
+            isGuest = false;
+            loginScreen.style.display = 'block';
+            welcomeScreen.style.display = 'none';
+        });
+    } else {
+        isGuest = false;
+        loginScreen.style.display = 'block';
+        welcomeScreen.style.display = 'none';
+    }
+}
+
+// Voice Selection Functions
+function initVoiceSelection() {
+    console.log('🗣️ Initializing voice selection...');
+    
+    // Load available voices
+    function loadVoices() {
+        availableVoices = speechSynthesis.getVoices();
+        const voiceSelect = document.getElementById('voiceSelect');
+        
+        if (availableVoices.length > 0) {
+            voiceSelect.innerHTML = '';
+            
+            // Group voices by language
+            const englishVoices = availableVoices.filter(voice => voice.lang.startsWith('en'));
+            const otherVoices = availableVoices.filter(voice => !voice.lang.startsWith('en'));
+            
+            // Add English voices first
+            if (englishVoices.length > 0) {
+                const englishGroup = document.createElement('optgroup');
+                englishGroup.label = 'English Voices';
+                englishVoices.forEach((voice, index) => {
+                    const option = document.createElement('option');
+                    option.value = voice.name;
+                    option.textContent = `${voice.name} (${voice.lang})`;
+                    if (voice.default) {
+                        option.textContent += ' - Default';
+                        option.selected = true;
+                        selectedVoice = voice;
+                    }
+                    englishGroup.appendChild(option);
+                });
+                voiceSelect.appendChild(englishGroup);
+            }
+            
+            // Add other voices
+            if (otherVoices.length > 0) {
+                const otherGroup = document.createElement('optgroup');
+                otherGroup.label = 'Other Languages';
+                otherVoices.forEach(voice => {
+                    const option = document.createElement('option');
+                    option.value = voice.name;
+                    option.textContent = `${voice.name} (${voice.lang})`;
+                    otherGroup.appendChild(option);
+                });
+                voiceSelect.appendChild(otherGroup);
+            }
+            
+            console.log(`✅ Loaded ${availableVoices.length} voices`);
+        }
+    }
+    
+    // Load voices immediately and on change
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    
+    // Voice select change handler
+    document.getElementById('voiceSelect').addEventListener('change', (e) => {
+        const voiceName = e.target.value;
+        selectedVoice = availableVoices.find(voice => voice.name === voiceName);
+        console.log('🎤 Voice changed to:', selectedVoice?.name);
+        
+        // Save preference if logged in
+        if (currentUser && !isGuest) {
+            database.ref(`users/${currentUser.uid}/preferences/voice`).set(voiceName);
+        }
+    });
+    
+    // Voice toggle handler
+    document.getElementById('voiceToggle').addEventListener('change', (e) => {
+        voiceEnabled = e.target.checked;
+        console.log('🔊 Voice', voiceEnabled ? 'enabled' : 'disabled');
+        
+        // Save preference if logged in
+        if (currentUser && !isGuest) {
+            database.ref(`users/${currentUser.uid}/preferences/voiceEnabled`).set(voiceEnabled);
+        }
+    });
+}
 
 // Firebase collaboration functions
 function initializeFirebaseSession(sessionCode, asHost = false) {
@@ -58,6 +246,21 @@ function initializeFirebaseSession(sessionCode, asHost = false) {
     // Check if session already exists to determine host
     sessionRef.once('value').then((snapshot) => {
         const sessionData = snapshot.val();
+        
+        // Check participant limit before joining
+        if (sessionData && sessionData.users) {
+            const currentParticipants = Object.keys(sessionData.users).length;
+            
+            // If not already in the session and session is full, prevent joining
+            if (!sessionData.users[userId] && currentParticipants >= MAX_PARTICIPANTS) {
+                console.log('❌ Session is full!');
+                alert(`Session is full! Maximum ${MAX_PARTICIPANTS} participants allowed (including host).`);
+                currentSession = null;
+                sessionRef = null;
+                showScreen(welcomeScreen);
+                return;
+            }
+        }
         
         if (!sessionData || !sessionData.hostId) {
             // This is a new session or no host set - make this user the host
@@ -203,11 +406,25 @@ function updateParticipantDisplay() {
 function updateCollaborativeUI() {
     // Update photo count display to include shared photos
     const totalSharedPhotos = sessionPhotos.length;
-    if (totalSharedPhotos > 0) {
-        const photoCountEl = document.getElementById('photoCount');
-        if (photoCountEl) {
-            photoCountEl.innerHTML += `<br><small>📤 ${totalSharedPhotos} shared photos</small>`;
+    
+    // Update participant count display
+    const userCount = Object.keys(connectedUsers).length;
+    const sessionCodeDisplay = document.getElementById('sessionCodeDisplay');
+    
+    if (currentSession && sessionCodeDisplay) {
+        let statusHTML = `Connected to session: <strong>${currentSession}</strong>`;
+        statusHTML += `<br><small>� ${userCount}/${MAX_PARTICIPANTS} participants`;
+        
+        if (userCount >= MAX_PARTICIPANTS) {
+            statusHTML += ` (Session Full!)`;
         }
+        
+        if (totalSharedPhotos > 0) {
+            statusHTML += ` | 📸 ${totalSharedPhotos} shared photos`;
+        }
+        
+        statusHTML += `</small>`;
+        sessionCodeDisplay.innerHTML = statusHTML;
     }
 }
 
@@ -586,23 +803,28 @@ function speak(text, instant = false) {
     
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Get available voices and select a better one
-    const voices = speechSynthesis.getVoices();
-    
-    // Prefer female voices with natural quality
-    const preferredVoices = voices.filter(voice => 
-        (voice.name.includes('Female') || 
-         voice.name.includes('Samantha') || 
-         voice.name.includes('Victoria') ||
-         voice.name.includes('Karen') ||
-         voice.name.includes('Fiona') ||
-         voice.name.includes('Zira') ||
-         voice.lang.startsWith('en')) && 
-        !voice.name.includes('Male')
-    );
-    
-    if (preferredVoices.length > 0) {
-        utterance.voice = preferredVoices[0];
+    // Use selected voice if available, otherwise use default
+    if (selectedVoice) {
+        utterance.voice = selectedVoice;
+    } else {
+        // Fallback: Get available voices and select a better one
+        const voices = speechSynthesis.getVoices();
+        
+        // Prefer female voices with natural quality
+        const preferredVoices = voices.filter(voice => 
+            (voice.name.includes('Female') || 
+             voice.name.includes('Samantha') || 
+             voice.name.includes('Victoria') ||
+             voice.name.includes('Karen') ||
+             voice.name.includes('Fiona') ||
+             voice.name.includes('Zira') ||
+             voice.lang.startsWith('en')) && 
+            !voice.name.includes('Male')
+        );
+        
+        if (preferredVoices.length > 0) {
+            utterance.voice = preferredVoices[0];
+        }
     }
     
     // Slower, deeper, more dramatic voice
@@ -631,48 +853,107 @@ function generateSessionCode() {
 }
 
 // Gallery functions (with error handling)
-function saveToGallery(photoData) {
+async function saveToGallery(photoData) {
+    // Don't save for guests
+    if (isGuest) {
+        console.log('👤 Guest mode: Photo not saved to gallery');
+        return;
+    }
+    
     try {
-        let gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
-        gallery.push({
-            id: Date.now(),
-            data: photoData,
-            timestamp: new Date().toISOString(),
-            session: currentSession
-        });
-        localStorage.setItem('photoGallery', JSON.stringify(gallery));
+        if (currentUser && !isGuest) {
+            // Logged in user: Save to Firebase Storage
+            const photoId = Date.now();
+            const photoRef = storage.ref(`users/${currentUser.uid}/gallery/${photoId}.jpg`);
+            
+            // Convert data URL to blob
+            const response = await fetch(photoData);
+            const blob = await response.blob();
+            
+            // Upload to Firebase Storage
+            await photoRef.put(blob);
+            
+            // Save metadata to Realtime Database
+            await database.ref(`users/${currentUser.uid}/gallery/${photoId}`).set({
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                session: currentSession,
+                downloadURL: await photoRef.getDownloadURL()
+            });
+            
+            console.log('✅ Photo saved to Firebase Storage');
+        } else {
+            // Fallback to localStorage (should not happen with auth)
+            let gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
+            gallery.push({
+                id: Date.now(),
+                data: photoData,
+                timestamp: new Date().toISOString(),
+                session: currentSession
+            });
+            localStorage.setItem('photoGallery', JSON.stringify(gallery));
+        }
     } catch (error) {
         console.error('Failed to save to gallery:', error);
-        alert('Unable to save photo to gallery. Storage may be full.');
+        alert('Unable to save photo to gallery: ' + error.message);
     }
 }
 
-function loadGallery() {
+async function loadGallery() {
+    const grid = document.getElementById('galleryGrid');
+    grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1;">Loading gallery...</p>';
+    
     try {
-        const gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
-        const grid = document.getElementById('galleryGrid');
+        let gallery = [];
+        
+        if (currentUser && !isGuest) {
+            // Load from Firebase for logged-in users
+            const snapshot = await database.ref(`users/${currentUser.uid}/gallery`).once('value');
+            const galleryData = snapshot.val();
+            
+            if (galleryData) {
+                gallery = Object.entries(galleryData).map(([id, data]) => ({
+                    id: id,
+                    data: data.downloadURL,
+                    timestamp: data.timestamp,
+                    session: data.session
+                }));
+            }
+            
+            console.log(`📸 Loaded ${gallery.length} photos from Firebase`);
+        } else if (isGuest) {
+            // Guest mode: No gallery
+            grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1; color: #8b6914;">👤 Guest Mode: Photos are not saved to gallery.<br>Sign in to save your photos!</p>';
+            return;
+        } else {
+            // Fallback to localStorage
+            gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
+        }
+        
         grid.innerHTML = '';
         
         if (gallery.length === 0) {
-            grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1;">No photos yet!</p>';
+            grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1;">No photos yet! Start taking some photos!</p>';
             return;
         }
         
-        gallery.reverse().forEach(item => {
+        // Sort by timestamp (newest first)
+        gallery.sort((a, b) => b.timestamp - a.timestamp);
+        
+        gallery.forEach(item => {
             const div = document.createElement('div');
             div.className = 'gallery-item';
             div.innerHTML = `
                 <img src="${item.data}" alt="Photo from ${new Date(item.timestamp).toLocaleDateString()}">
                 <div class="gallery-item-actions">
-                    <button onclick="downloadGalleryItem('${item.data}', ${item.id})" aria-label="Download photo">⬇</button>
-                    <button onclick="deleteGalleryItem(${item.id})" aria-label="Delete photo">🗑</button>
+                    <button onclick="downloadGalleryItem('${item.data}', '${item.id}')" aria-label="Download photo">⬇</button>
+                    <button onclick="deleteGalleryItem('${item.id}')" aria-label="Delete photo">🗑</button>
                 </div>
             `;
             grid.appendChild(div);
         });
     } catch (error) {
         console.error('Failed to load gallery:', error);
-        alert('Unable to load gallery.');
+        grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1; color: red;">Failed to load gallery.</p>';
     }
 }
 
@@ -683,18 +964,33 @@ window.downloadGalleryItem = function(data, id) {
     link.click();
 };
 
-window.deleteGalleryItem = function(id) {
+window.deleteGalleryItem = async function(id) {
     if (!confirm('Are you sure you want to delete this photo?')) {
         return;
     }
     try {
-        let gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
-        gallery = gallery.filter(item => item.id !== id);
-        localStorage.setItem('photoGallery', JSON.stringify(gallery));
+        if (currentUser && !isGuest) {
+            // Delete from Firebase
+            await database.ref(`users/${currentUser.uid}/gallery/${id}`).remove();
+            
+            // Delete from Storage
+            try {
+                await storage.ref(`users/${currentUser.uid}/gallery/${id}.jpg`).delete();
+            } catch (storageError) {
+                console.warn('Storage file may not exist:', storageError);
+            }
+            
+            console.log('✅ Photo deleted from Firebase');
+        } else {
+            // Delete from localStorage
+            let gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
+            gallery = gallery.filter(item => item.id !== parseInt(id));
+            localStorage.setItem('photoGallery', JSON.stringify(gallery));
+        }
         loadGallery();
     } catch (error) {
         console.error('Failed to delete photo:', error);
-        alert('Unable to delete photo.');
+        alert('Unable to delete photo: ' + error.message);
     }
 };
 
@@ -964,13 +1260,34 @@ async function startPhotoSequence() {
     
     // Get selected number of photos
     const photoCountElement = document.getElementById('photoCountSelect');
-    totalPhotos = parseInt(photoCountElement.value);
-    console.log('Total photos to capture:', totalPhotos);
+    let selectedTotalPhotos = parseInt(photoCountElement.value);
+    console.log('Selected total photos:', selectedTotalPhotos);
     
-    if (isNaN(totalPhotos) || totalPhotos < 2 || totalPhotos > 4) {
-        console.error('Invalid photo count:', totalPhotos);
-        totalPhotos = 4; // Default fallback
-        console.log('Using default:', totalPhotos);
+    if (isNaN(selectedTotalPhotos) || selectedTotalPhotos < 2 || selectedTotalPhotos > 4) {
+        console.error('Invalid photo count:', selectedTotalPhotos);
+        selectedTotalPhotos = 4; // Default fallback
+        console.log('Using default:', selectedTotalPhotos);
+    }
+    
+    // Calculate photos per participant in collaborative session
+    if (currentSession) {
+        const participantCount = Object.keys(connectedUsers).length || 1;
+        totalPhotos = Math.floor(selectedTotalPhotos / participantCount);
+        
+        // Ensure at least 1 photo per person
+        if (totalPhotos < 1) {
+            totalPhotos = 1;
+        }
+        
+        console.log(`👥 ${participantCount} participants, ${selectedTotalPhotos} total photos`);
+        console.log(`📸 Each participant will take ${totalPhotos} photo(s)`);
+        
+        if (isHost) {
+            showNotification(`Each of the ${participantCount} participants will take ${totalPhotos} photo(s)!`);
+        }
+    } else {
+        // Non-collaborative: use selected number
+        totalPhotos = selectedTotalPhotos;
     }
     
     document.getElementById('captureBtn').disabled = true;
@@ -1273,6 +1590,35 @@ function resetSession() {
 }
 
 // Event listeners
+
+// Authentication event listeners
+document.getElementById('googleSignInBtn').addEventListener('click', signInWithGoogle);
+
+document.getElementById('emailSignInBtn').addEventListener('click', () => {
+    const email = document.getElementById('emailInput').value;
+    const password = document.getElementById('passwordInput').value;
+    if (email && password) {
+        signInWithEmail(email, password);
+    } else {
+        alert('Please enter both email and password');
+    }
+});
+
+document.getElementById('emailSignUpBtn').addEventListener('click', () => {
+    const email = document.getElementById('emailInput').value;
+    const password = document.getElementById('passwordInput').value;
+    if (email && password) {
+        signUpWithEmail(email, password);
+    } else {
+        alert('Please enter both email and password');
+    }
+});
+
+document.getElementById('continueAsGuestBtn').addEventListener('click', continueAsGuest);
+
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
+// Navigation event listeners
 document.getElementById('startSoloBtn').addEventListener('click', () => {
     currentSession = null;
     showScreen(cameraAccessScreen);
@@ -1316,10 +1662,32 @@ document.getElementById('backFromGalleryBtn').addEventListener('click', () => {
     showScreen(welcomeScreen);
 });
 
-document.getElementById('clearGalleryBtn').addEventListener('click', () => {
+document.getElementById('clearGalleryBtn').addEventListener('click', async () => {
     if (confirm('Are you sure you want to clear your entire gallery?')) {
         try {
-            localStorage.removeItem('photoGallery');
+            if (currentUser && !isGuest) {
+                // Clear Firebase gallery
+                const snapshot = await database.ref(`users/${currentUser.uid}/gallery`).once('value');
+                const gallery = snapshot.val();
+                
+                if (gallery) {
+                    // Delete all photos from Storage
+                    for (const photoId in gallery) {
+                        try {
+                            await storage.ref(`users/${currentUser.uid}/gallery/${photoId}.jpg`).delete();
+                        } catch (err) {
+                            console.warn('Could not delete storage file:', err);
+                        }
+                    }
+                    
+                    // Delete all metadata from database
+                    await database.ref(`users/${currentUser.uid}/gallery`).remove();
+                    console.log('✅ Gallery cleared from Firebase');
+                }
+            } else {
+                // Clear localStorage
+                localStorage.removeItem('photoGallery');
+            }
             loadGallery();
         } catch (error) {
             console.error('Failed to clear gallery:', error);
@@ -1337,3 +1705,8 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
         // The live preview will automatically update with the new filter
     });
 });
+
+// Initialize authentication and voice selection on page load
+console.log('🎬 Initializing Vintage PhotoBooth...');
+initAuth();
+initVoiceSelection();

@@ -583,3 +583,148 @@ body {
     color: #c4a667;
     font-style: italic;
 }
+
+/* Login Screen Styles */
+.login-screen {
+    text-align: center;
+}
+
+.auth-container {
+    margin-top: 30px;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.btn-google {
+    background: white;
+    color: #444;
+    border: 2px solid #ddd;
+    font-size: 1em;
+    padding: 15px 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    transition: all 0.3s ease;
+}
+
+.btn-google:hover {
+    background: #f8f8f8;
+    border-color: #8b6914;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.divider {
+    margin: 25px 0;
+    text-align: center;
+    position: relative;
+}
+
+.divider::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #c4a747;
+}
+
+.divider span {
+    background: #f5f0e8;
+    padding: 0 15px;
+    position: relative;
+    color: #8b6914;
+    font-style: italic;
+}
+
+.email-auth {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.auth-input {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 1em;
+    padding: 12px 15px;
+    border: 2px solid #c4a747;
+    border-radius: 8px;
+    background: white;
+    color: #6b4423;
+    transition: all 0.3s ease;
+}
+
+.auth-input:focus {
+    outline: none;
+    border-color: #8b6914;
+    box-shadow: 0 0 0 3px rgba(139, 105, 20, 0.1);
+}
+
+.auth-input::placeholder {
+    color: #b8a080;
+}
+
+.btn-guest {
+    background: linear-gradient(135deg, #999 0%, #666 100%);
+    font-size: 1em;
+    padding: 15px 30px;
+    width: 100%;
+}
+
+.btn-guest:hover {
+    background: linear-gradient(135deg, #aaa 0%, #777 100%);
+}
+
+.auth-note {
+    margin-top: 15px;
+    font-size: 0.85em;
+    color: #8b6914;
+    font-style: italic;
+}
+
+/* User Info Bar */
+.user-info {
+    background: rgba(196, 167, 71, 0.2);
+    padding: 12px 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 2px solid #c4a747;
+}
+
+.user-info span {
+    color: #6b4423;
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.btn-small {
+    font-family: 'Libre Baskerville', serif;
+    padding: 8px 20px;
+    background: #8b6914;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.3s ease;
+}
+
+.btn-small:hover {
+    background: #6b4423;
+    transform: translateY(-2px);
+}
+
+/* Voice selection customization */
+#voiceSelect {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 0.95em;
+}
+
+#voiceToggle {
+    accent-color: #8b6914;
+}

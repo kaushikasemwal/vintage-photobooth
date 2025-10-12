@@ -18,6 +18,12 @@ firebase.initializeApp(firebaseConfig);
 // Get database reference for real-time collaboration
 const database = firebase.database();
 
+// Get authentication reference
+const auth = firebase.auth();
+
+// Get storage reference for user photo galleries
+const storage = firebase.storage();
+
 console.log('🔥 Firebase initialized for Vintage PhotoBooth collaboration');
 
-// Force redeploy: Syntax error fix applied
+// Force redeploy: Authentication and Storage added
