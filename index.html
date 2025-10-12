@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vintage Photobooth</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="card">
+        <div class="content">
+            <!-- Welcome Screen -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <h1>VINTAGE</h1>
+                <h2>PHOTO BOOTH</h2>
+                
+                <div class="decorative-diamonds">
+                    <div class="diamond"></div>
+                    <div class="diamond"></div>
+                    <div class="diamond"></div>
+                </div>
+                
+                <h3>Step Right Up!</h3>
+                <p>Get ready for your vintage photo session!</p>
+                
+                <div class="session-options">
+                    <button class="btn" id="startSoloBtn">Start Solo Session</button>
+                    <button class="btn btn-secondary" id="createCollabBtn">Create Collaborative Session</button>
+                </div>
+                
+                <div class="join-session">
+                    <p>Or join an existing session:</p>
+                    <input type="text" id="sessionCodeInput" placeholder="ABC123" maxlength="6">
+                    <button class="btn btn-secondary" id="joinSessionBtn">Join</button>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <button class="btn btn-secondary" id="viewGalleryBtn">View Gallery</button>
+                </div>
+            </div>
+            
+            <!-- Camera Access Screen -->
+            <div class="camera-screen" id="cameraAccessScreen">
+                <h2>Camera Access Required</h2>
+                <p>Please allow camera access to capture your vintage memories</p>
+                
+                <div style="font-size: 80px; margin: 30px 0;">📷</div>
+                
+                <button class="btn" id="enableCameraBtn">Enable Camera</button>
+            </div>
+            
+            <!-- Photo Capture Screen -->
+            <div class="camera-screen" id="captureScreen">
+                <h2>Say Cheese! 📸</h2>
+                
+                <div class="session-code-display" id="sessionCodeDisplay"></div>
+                
+                <div class="lighting-indicator">
+                    <div class="light-status" id="lightStatus"></div>
+                    <span id="lightText">Checking lighting...</span>
+                </div>
+                
+                <div class="filter-selection">
+                    <button class="filter-btn active" data-filter="sepia">Classic Sepia</button>
+                    <button class="filter-btn" data-filter="kodachrome">1950s Kodachrome</button>
+                    <button class="filter-btn" data-filter="polaroid">1970s Polaroid</button>
+                    <button class="filter-btn" data-filter="film">1980s Film</button>
+                    <button class="filter-btn" data-filter="vintage">Vintage Fade</button>
+                    <button class="filter-btn" data-filter="cyanotype">Cyanotype</button>
+                    <button class="filter-btn" data-filter="daguerreotype">Daguerreotype</button>
+                </div>
+                
+                <div class="camera-container">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas"></canvas>
+                    <canvas id="captureCanvas"></canvas>
+                    <div class="countdown-overlay" id="countdown"></div>
+                    <div class="flash-overlay" id="flash"></div>
+                </div>
+                
+                <div class="photo-count" id="photoCount"></div>
+                
+                <div class="customization-panel">
+                    <h3 style="text-align: center; color: #6b4423; margin-bottom: 15px;">Customize Your Strip</h3>
+                    
+                    <div class="custom-section">
+                        <label>Number of Photos:</label>
+                        <select id="photoCountSelect">
+                            <option value="2">2 Photos</option>
+                            <option value="3">3 Photos</option>
+                            <option value="4" selected>4 Photos</option>
+                        </select>
+                    </div>
+                    
+                    <div class="custom-section">
+                        <label>Layout Style:</label>
+                        <select id="layoutStyle">
+                            <option value="classic">Classic Vertical Strip</option>
+                            <option value="wide">Wide Grid (2x2)</option>
+                            <option value="postcard">Postcard Style</option>
+                        </select>
+                    </div>
+                    
+                    <div class="custom-section">
+                        <label>Header Text:</label>
+                        <input type="text" id="headerText" placeholder="Enter custom header" value="VINTAGE MEMORIES">
+                    </div>
+                    
+                    <div class="custom-section">
+                        <label>Border Style:</label>
+                        <select id="borderStyle">
+                            <option value="ornate">Ornate Gold</option>
+                            <option value="simple">Simple Clean</option>
+                            <option value="decorative">Decorative Dashed</option>
+                            <option value="vintage">Vintage Scalloped</option>
+                            <option value="filmstrip">Film Strip</option>
+                            <option value="elegant">Elegant Double</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button class="btn" id="captureBtn">Start Capture</button>
+                    <button class="btn btn-secondary" id="backToWelcomeBtn">Back</button>
+                </div>
+            </div>
+            
+            <!-- Results Screen -->
+            <div class="results-screen" id="resultsScreen">
+                <h2>Your Photo Strip! ✨</h2>
+                
+                <div class="photo-strip">
+                    <canvas id="stripCanvas"></canvas>
+                </div>
+                
+                <div class="controls">
+                    <button class="btn" id="downloadBtn">Download Strip</button>
+                    <button class="btn btn-secondary" id="downloadAllBtn">Download All Photos</button>
+                    <button class="btn btn-secondary" id="newSessionBtn">New Session</button>
+                </div>
+            </div>
+            
+            <!-- Gallery Screen -->
+            <div class="gallery-screen" id="galleryScreen">
+                <h2 style="text-align: center; color: #6b4423; margin-bottom: 20px;">Your Photo Gallery</h2>
+                
+                <div class="gallery-grid" id="galleryGrid"></div>
+                
+                <div class="controls">
+                    <button class="btn btn-secondary" id="backFromGalleryBtn">Back to Home</button>
+                    <button class="btn btn-secondary" id="clearGalleryBtn">Clear Gallery</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
