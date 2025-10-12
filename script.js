@@ -39,8 +39,13 @@ let connectedUsers = {};
 
 // Firebase collaboration functions
 function initializeFirebaseSession(sessionCode) {
+    console.log('🔥 Initializing Firebase session:', sessionCode);
+    console.log('Firebase available:', !!window.firebase);
+    console.log('Database available:', !!database);
+    
     if (!window.firebase || !database) {
-        console.log('Firebase not available, using local storage fallback');
+        console.error('❌ Firebase not available, using local storage fallback');
+        alert('Firebase connection failed. Real-time collaboration not available.');
         return initializeLocalSession(sessionCode);
     }
     
@@ -60,14 +65,18 @@ function initializeFirebaseSession(sessionCode) {
     // Listen for other users joining/leaving
     sessionRef.child('users').on('value', (snapshot) => {
         connectedUsers = snapshot.val() || {};
+        console.log('👥 Connected users updated:', Object.keys(connectedUsers).length);
         updateParticipantDisplay();
     });
     
     // Listen for shared photos
     sessionRef.child('photos').on('child_added', (snapshot) => {
         const photoData = snapshot.val();
-        if (photoData.userId !== userId) {
+        console.log('📸 New photo detected:', photoData ? 'from user ' + photoData.userId : 'null data');
+        
+        if (photoData && photoData.userId !== userId) {
             // Someone else took a photo!
+            console.log('🎉 Receiving photo from friend:', photoData.userName);
             addSharedPhotoToSession(photoData);
         }
     });
@@ -80,7 +89,16 @@ function initializeFirebaseSession(sessionCode) {
 }
 
 function sharePhotoWithSession(photoDataUrl) {
-    if (!sessionRef || !currentSession) return;
+    console.log('📸 Attempting to share photo with session');
+    console.log('Session ref exists:', !!sessionRef);
+    console.log('Current session:', currentSession);
+    
+    if (!sessionRef || !currentSession) {
+        console.warn('❌ No active session for photo sharing');
+        return;
+    }
+    
+    console.log('🔄 Uploading photo to Firebase...');
     
     // Add photo to Firebase session
     const photoRef = sessionRef.child('photos').push();
@@ -90,6 +108,11 @@ function sharePhotoWithSession(photoDataUrl) {
         photoData: photoDataUrl,
         timestamp: firebase.database.ServerValue.TIMESTAMP,
         filter: currentFilter
+    }).then(() => {
+        console.log('✅ Photo uploaded successfully!');
+    }).catch((error) => {
+        console.error('❌ Photo upload failed:', error);
+        alert('Failed to share photo with session: ' + error.message);
     });
     
     // Update user's photo count
@@ -97,9 +120,11 @@ function sharePhotoWithSession(photoDataUrl) {
 }
 
 function addSharedPhotoToSession(photoData) {
+    console.log('🎨 Adding shared photo to session:', photoData.userName);
     sessionPhotos.push(photoData);
     showSharedPhotoNotification(photoData.userName);
     updateCollaborativeUI();
+    console.log('📊 Total session photos:', sessionPhotos.length);
 }
 
 function showSharedPhotoNotification(userName) {
