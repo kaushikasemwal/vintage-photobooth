@@ -23,13 +23,13 @@ const flash = document.getElementById('flash');
 
 let stream = null;
 let photos = [];
-let totalPhotos = 4; // Default, can be changed
+let totalPhotos = 4;
 let currentFilter = 'sepia';
 let currentSession = null;
 let voiceEnabled = true;
 let animationId = null;
 let lightingIntervalId = null;
-let soloStripDataUrl = null; // Store solo strip for viewing later
+let soloStripDataUrl = null;
 
 // Authentication variables
 let currentUser = null;
@@ -38,21 +38,20 @@ let availableVoices = [];
 let selectedVoice = null;
 
 // Collaboration variables - Firebase powered
-const MAX_PARTICIPANTS = 4; // Maximum number of participants including host
+const MAX_PARTICIPANTS = 4;
 let participantCount = 1;
 let sessionPhotos = [];
 let userId = 'user_' + Math.random().toString(36).substr(2, 9);
 let userName = 'Guest_' + Math.random().toString(36).substr(2, 4);
 let sessionRef = null;
 let connectedUsers = {};
-let isHost = false; // Track if this user is the session host
-let hostId = null; // Store the host's user ID
+let isHost = false;
+let hostId = null;
 
 // Authentication Functions
 function initAuth() {
     console.log('🔐 Initializing authentication...');
     
-    // Listen for auth state changes
     auth.onAuthStateChanged((user) => {
         if (user) {
             currentUser = user;
@@ -72,7 +71,6 @@ function showWelcomeScreen() {
     loginScreen.style.display = 'none';
     welcomeScreen.style.display = 'block';
     
-    // Update user info display
     const userInfo = document.getElementById('userInfo');
     const userDisplayName = document.getElementById('userDisplayName');
     
@@ -151,7 +149,6 @@ function logout() {
 function initVoiceSelection() {
     console.log('🗣️ Initializing voice selection...');
     
-    // Load available voices
     function loadVoices() {
         availableVoices = speechSynthesis.getVoices();
         const voiceSelect = document.getElementById('voiceSelect');
@@ -159,11 +156,9 @@ function initVoiceSelection() {
         if (availableVoices.length > 0) {
             voiceSelect.innerHTML = '';
             
-            // Group voices by language
             const englishVoices = availableVoices.filter(voice => voice.lang.startsWith('en'));
             const otherVoices = availableVoices.filter(voice => !voice.lang.startsWith('en'));
             
-            // Add English voices first
             if (englishVoices.length > 0) {
                 const englishGroup = document.createElement('optgroup');
                 englishGroup.label = 'English Voices';
@@ -181,7 +176,6 @@ function initVoiceSelection() {
                 voiceSelect.appendChild(englishGroup);
             }
             
-            // Add other voices
             if (otherVoices.length > 0) {
                 const otherGroup = document.createElement('optgroup');
                 otherGroup.label = 'Other Languages';
@@ -198,30 +192,25 @@ function initVoiceSelection() {
         }
     }
     
-    // Load voices immediately and on change
     loadVoices();
     if (speechSynthesis.onvoiceschanged !== undefined) {
         speechSynthesis.onvoiceschanged = loadVoices;
     }
     
-    // Voice select change handler
     document.getElementById('voiceSelect').addEventListener('change', (e) => {
         const voiceName = e.target.value;
         selectedVoice = availableVoices.find(voice => voice.name === voiceName);
         console.log('🎤 Voice changed to:', selectedVoice?.name);
         
-        // Save preference if logged in
         if (currentUser && !isGuest) {
             database.ref(`users/${currentUser.uid}/preferences/voice`).set(voiceName);
         }
     });
     
-    // Voice toggle handler
     document.getElementById('voiceToggle').addEventListener('change', (e) => {
         voiceEnabled = e.target.checked;
         console.log('🔊 Voice', voiceEnabled ? 'enabled' : 'disabled');
         
-        // Save preference if logged in
         if (currentUser && !isGuest) {
             database.ref(`users/${currentUser.uid}/preferences/voiceEnabled`).set(voiceEnabled);
         }
@@ -230,7 +219,7 @@ function initVoiceSelection() {
 
 // Firebase collaboration functions
 function initializeFirebaseSession(sessionCode, asHost = false) {
-    console.log('🔥 Initializing Firebase session:', sessionCode);
+    console.log('📥 Initializing Firebase session:', sessionCode);
     console.log('Firebase available:', !!window.firebase);
     console.log('Database available:', !!database);
     
@@ -244,15 +233,12 @@ function initializeFirebaseSession(sessionCode, asHost = false) {
     sessionRef = database.ref('sessions/' + sessionCode);
     isHost = asHost;
     
-    // Check if session already exists to determine host
     sessionRef.once('value').then((snapshot) => {
         const sessionData = snapshot.val();
         
-        // Check participant limit before joining
         if (sessionData && sessionData.users) {
             const currentParticipants = Object.keys(sessionData.users).length;
             
-            // If not already in the session and session is full, prevent joining
             if (!sessionData.users[userId] && currentParticipants >= MAX_PARTICIPANTS) {
                 console.log('❌ Session is full!');
                 alert(`Session is full! Maximum ${MAX_PARTICIPANTS} participants allowed (including host).`);
@@ -264,23 +250,21 @@ function initializeFirebaseSession(sessionCode, asHost = false) {
         }
         
         if (!sessionData || !sessionData.hostId) {
-            // This is a new session or no host set - make this user the host
             isHost = true;
             hostId = userId;
             sessionRef.child('hostId').set(userId);
             sessionRef.child('hostName').set(userName);
-            console.log('👑 You are the session host!');
+            console.log('🏠 You are the session host!');
         } else {
-            // Session exists, get host info
             hostId = sessionData.hostId;
             isHost = (hostId === userId);
-            console.log(isHost ? '👑 You are the session host!' : '👥 You joined as participant');
+            console.log(isHost ? '🏠 You are the session host!' : '👥 You joined as participant');
         }
         
         updateHostControls();
+        updateCollaborativeUI();
     });
     
-    // Listen for host control commands
     sessionRef.child('commands').on('child_added', (snapshot) => {
         const command = snapshot.val();
         if (!isHost && command.type === 'capture') {
@@ -289,7 +273,6 @@ function initializeFirebaseSession(sessionCode, asHost = false) {
         }
     });
     
-    // Add this user to the session
     const userRef = sessionRef.child('users/' + userId);
     userRef.set({
         name: userName,
@@ -300,49 +283,42 @@ function initializeFirebaseSession(sessionCode, asHost = false) {
         isHost: isHost
     });
     
-    // Listen for other users joining/leaving
     sessionRef.child('users').on('value', (snapshot) => {
         connectedUsers = snapshot.val() || {};
         console.log('👥 Connected users updated:', Object.keys(connectedUsers).length);
         updateParticipantDisplay();
+        updateCollaborativeUI();
     });
     
-    // Listen for shared photos
     sessionRef.child('photos').on('child_added', (snapshot) => {
         const photoData = snapshot.val();
         console.log('📸 New photo detected:', photoData ? 'from user ' + photoData.userId : 'null data');
         
         if (photoData && photoData.userId !== userId) {
-            // Someone else took a photo!
             console.log('🎉 Receiving photo from friend:', photoData.userName);
             addSharedPhotoToSession(photoData);
         }
     });
     
-    // Listen for collaborative strip being created
     sessionRef.child('collaborativeStrip').on('value', (snapshot) => {
         const stripData = snapshot.val();
         if (stripData && stripData.createdBy !== userId) {
             console.log('🎨 Collaborative strip created by:', stripData.createdByName);
-            // Load and display the collaborative strip
             showSharedCollaborativeStrip(stripData);
         }
     });
     
-    // Listen for session end
     sessionRef.child('sessionEnded').on('value', (snapshot) => {
         const endData = snapshot.val();
         if (endData && endData.endedBy !== userId) {
-            console.log('🏁 Session ended by:', endData.endedByName);
-            showNotification(`🏁 ${endData.endedByName} ended the session`);
-            // Give user time to see the notification and download if needed
+            console.log('🎬 Session ended by:', endData.endedByName);
+            showNotification(`🎬 ${endData.endedByName} ended the session`);
             setTimeout(() => {
                 resetSession();
             }, 3000);
         }
     });
     
-    // Keep connection alive
     userRef.child('lastActive').onDisconnect().remove();
     setInterval(() => {
         userRef.child('lastActive').set(firebase.database.ServerValue.TIMESTAMP);
@@ -359,9 +335,8 @@ function sharePhotoWithSession(photoDataUrl) {
         return;
     }
     
-    console.log('🔄 Uploading photo to Firebase...');
+    console.log('📄 Uploading photo to Firebase...');
     
-    // Add photo to Firebase session
     const photoRef = sessionRef.child('photos').push();
     photoRef.set({
         userId: userId,
@@ -376,7 +351,6 @@ function sharePhotoWithSession(photoDataUrl) {
         alert('Failed to share photo with session: ' + error.message);
     });
     
-    // Update user's photo count
     sessionRef.child('users/' + userId + '/photoCount').set(photos.length);
 }
 
@@ -385,11 +359,10 @@ function addSharedPhotoToSession(photoData) {
     sessionPhotos.push(photoData);
     showSharedPhotoNotification(photoData.userName);
     updateCollaborativeUI();
-    console.log('📊 Total session photos:', sessionPhotos.length);
+    console.log('🔊 Total session photos:', sessionPhotos.length);
 }
 
 function showSharedPhotoNotification(userName) {
-    // Create notification element
     const notification = document.createElement('div');
     notification.className = 'shared-photo-notification';
     notification.innerHTML = `
@@ -400,10 +373,8 @@ function showSharedPhotoNotification(userName) {
     
     document.body.appendChild(notification);
     
-    // Animate in
     setTimeout(() => notification.classList.add('show'), 100);
     
-    // Remove after 3 seconds
     setTimeout(() => {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
@@ -416,7 +387,6 @@ function showSharedCollaborativeStrip(stripData) {
     console.log('🎨 Displaying shared collaborative strip');
     showNotification(`🎉 ${stripData.createdByName} created the collaborative strip!`);
     
-    // Load the strip image onto canvas
     const img = new Image();
     img.src = stripData.stripData;
     img.onload = () => {
@@ -425,16 +395,13 @@ function showSharedCollaborativeStrip(stripData) {
         stripCtx.clearRect(0, 0, stripCanvas.width, stripCanvas.height);
         stripCtx.drawImage(img, 0, 0);
         
-        // Show results screen with the collaborative strip
         showScreen(resultsScreen);
         
-        // Hide collab button, show solo strip button if available
         document.getElementById('createCollabStripBtn').style.display = 'none';
         if (soloStripDataUrl) {
             document.getElementById('viewSoloStripBtn').style.display = 'inline-block';
         }
         
-        // Show end session button
         if (currentSession) {
             document.getElementById('endSessionBtn').style.display = 'inline-block';
         }
@@ -444,60 +411,72 @@ function showSharedCollaborativeStrip(stripData) {
 function updateParticipantDisplay() {
     const userCount = Object.keys(connectedUsers).length;
     participantCount = userCount;
-    
-    // Update session display
-    const sessionDisplay = document.getElementById('sessionCodeDisplay');
-    if (sessionDisplay && currentSession) {
-        const userNames = Object.values(connectedUsers).map(user => user.name).join(', ');
-        sessionDisplay.innerHTML = `
-            <strong>Session: ${currentSession}</strong><br>
-            <small>👥 ${userCount} participant(s): ${userNames}</small>
-        `;
-    }
 }
 
+// UPDATED: Improved Collaboration UI with better visibility
 function updateCollaborativeUI() {
-    // Update photo count display to include shared photos
-    const totalSharedPhotos = sessionPhotos.length;
+    const collaborationStatus = document.getElementById('collaborationStatus');
+    const sessionDisplay = document.getElementById('sessionCodeDisplay');
+    const sessionCodeText = document.getElementById('sessionCodeText');
+    const copyCodeBtn = document.getElementById('copyCodeBtn');
     
-    // Update participant count display
-    const userCount = Object.keys(connectedUsers).length;
-    const sessionCodeDisplay = document.getElementById('sessionCodeDisplay');
-    
-    if (currentSession && sessionCodeDisplay) {
-        let statusHTML;
+    if (!sessionDisplay) return;
+
+    if (currentSession) {
+        // Always show session code display during collaboration
+        sessionDisplay.style.display = 'flex';
+        
+        const userCount = Object.keys(connectedUsers).length;
+        const totalSharedPhotos = sessionPhotos.length;
+        
+        let statusHTML = '';
+        
         if (isHost) {
-            statusHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
+            statusHTML = `<strong>🏠 Session Code: ${currentSession}</strong>`;
         } else {
-            statusHTML = `Connected to session: <strong>${currentSession}</strong>`;
-        }
-        statusHTML += `<br><small>👥 ${userCount}/${MAX_PARTICIPANTS} participants`;
-        
-        if (userCount >= MAX_PARTICIPANTS) {
-            statusHTML += ` (Session Full!)`;
+            statusHTML = `<strong>Connected: ${currentSession}</strong>`;
         }
         
-        if (totalSharedPhotos > 0) {
-            statusHTML += ` | 📸 ${totalSharedPhotos} shared photos`;
+        // Add participant info if available
+        if (userCount > 0) {
+            statusHTML += `<br><small>👥 ${userCount}/${MAX_PARTICIPANTS} participants`;
+            
+            if (userCount >= MAX_PARTICIPANTS) {
+                statusHTML += ` (Full!)`;
+            }
+            
+            if (totalSharedPhotos > 0) {
+                statusHTML += ` | 📸 ${totalSharedPhotos} photos`;
+            }
+            
+            statusHTML += `</small>`;
         }
-        
-        statusHTML += `</small>`;
-        
-        const sessionCodeText = document.getElementById('sessionCodeText');
-        const copyCodeBtn = document.getElementById('copyCodeBtn');
-        
-        console.log('🔍 updateSessionStatus called - isHost:', isHost);
         
         if (sessionCodeText) {
             sessionCodeText.innerHTML = statusHTML;
         }
         
-        // Show copy button for host
-        if (copyCodeBtn && isHost) {
-            copyCodeBtn.style.display = 'inline-block';
-            console.log('✅ Copy button shown in updateSessionStatus');
-        } else {
-            console.log('❌ Copy button NOT shown - isHost:', isHost, 'copyCodeBtn:', !!copyCodeBtn);
+        // Show copy button for host - NOW VISIBLE BY DEFAULT
+        if (copyCodeBtn) {
+            if (isHost) {
+                copyCodeBtn.style.display = 'inline-block';
+                copyCodeBtn.title = 'Share this code with friends!';
+            } else {
+                copyCodeBtn.style.display = 'none';
+            }
+        }
+        
+        // Show collaboration status
+        if (collaborationStatus) {
+            collaborationStatus.style.display = 'block';
+        }
+    } else {
+        // Hide session display when not in collaborative mode
+        if (sessionDisplay) {
+            sessionDisplay.style.display = 'none';
+        }
+        if (collaborationStatus) {
+            collaborationStatus.style.display = 'none';
         }
     }
 }
@@ -508,15 +487,12 @@ function updateHostControls() {
     if (!captureBtn) return;
     
     if (!currentSession) {
-        // Solo mode - normal capture
         captureBtn.textContent = 'Take Photos';
         captureBtn.disabled = false;
     } else if (isHost) {
-        // Host mode - can capture for everyone
-        captureBtn.textContent = '👑 Capture All (Host)';
+        captureBtn.textContent = '🏠 Capture All (Host)';
         captureBtn.disabled = false;
     } else {
-        // Participant mode - wait for host
         captureBtn.textContent = '⏳ Waiting for Host...';
         captureBtn.disabled = true;
     }
@@ -524,19 +500,15 @@ function updateHostControls() {
 
 async function handleHostCommand(command) {
     if (command.type === 'capture') {
-        // Host initiated a photo capture
         showNotification('📸 Host is taking a group photo! Get ready!');
         
-        // Start the full photo sequence as a participant
         console.log('Starting participant photo sequence...');
         photos = [];
         
-        // Get total photos from command
         const totalPhotos = command.totalPhotos || 1;
         
         document.getElementById('captureBtn').disabled = true;
         
-        // Announce start
         speak('Get ready, darling! Strike a pose!', true);
         await new Promise(resolve => setTimeout(resolve, 2000));
         
@@ -544,12 +516,10 @@ async function handleHostCommand(command) {
             console.log(`Capturing photo ${i + 1} of ${totalPhotos}`);
             photoCount.textContent = `Photo ${i + 1} of ${totalPhotos}`;
             
-            // Show countdown - synchronized with host
             for (let j = 3; j > 0; j--) {
                 countdown.textContent = j;
                 countdown.style.display = 'flex';
                 
-                // Speak and show number simultaneously
                 if (j === 3) speak('Three', true);
                 else if (j === 2) speak('Two', true);
                 else if (j === 1) speak('One', true);
@@ -557,7 +527,6 @@ async function handleHostCommand(command) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
-            // Take photo
             countdown.textContent = '📷';
             countdown.style.display = 'flex';
             speak('Gorgeous!', true);
@@ -569,7 +538,6 @@ async function handleHostCommand(command) {
             await new Promise(resolve => setTimeout(resolve, 300));
             countdown.style.display = 'none';
             
-            // Pause between photos with encouragement
             if (i < totalPhotos - 1) {
                 const encouragements = [
                     'Fabulous! Next pose!',
@@ -620,10 +588,8 @@ function showNotification(message) {
 function createCollaborativeStrip() {
     console.log('🎨 Creating collaborative strip with all photos');
     
-    // Collect all photos from all users
     const allCollabPhotos = [];
     
-    // Add your own photos
     photos.forEach(photo => {
         allCollabPhotos.push({
             data: photo,
@@ -632,7 +598,6 @@ function createCollaborativeStrip() {
         });
     });
     
-    // Add photos from other participants
     sessionPhotos.forEach(photo => {
         allCollabPhotos.push({
             data: photo.photoData,
@@ -648,7 +613,6 @@ function createCollaborativeStrip() {
         return;
     }
     
-    // Create strip with all collaborative photos
     createPhotoStripFromPhotos(allCollabPhotos);
 }
 
@@ -661,9 +625,8 @@ function createPhotoStripFromPhotos(photoArray) {
     let stripWidth, photoWidth, photoHeight, stripHeight, columns, rows;
     const spacing = 15;
     const headerHeight = 70;
-    const footerHeight = 70; // Increased for participant names
+    const footerHeight = 70;
     
-    // Configure layout dimensions
     if (layout === 'wide' || layout === 'postcard') {
         columns = Math.min(4, numPhotos);
         rows = Math.ceil(numPhotos / columns);
@@ -678,7 +641,6 @@ function createPhotoStripFromPhotos(photoArray) {
             photoHeight = Math.floor(photoWidth * 0.75);
         }
     } else {
-        // Classic vertical layout
         stripWidth = 400;
         photoWidth = 370;
         photoHeight = 280;
@@ -691,20 +653,16 @@ function createPhotoStripFromPhotos(photoArray) {
     stripCanvas.width = stripWidth;
     stripCanvas.height = stripHeight;
     
-    // Background
     stripCtx.fillStyle = '#faf8f5';
     stripCtx.fillRect(0, 0, stripWidth, stripHeight);
     
-    // Apply border (reuse existing border code)
     applyStripBorder(borderStyle, stripWidth, stripHeight);
     
-    // Header
     stripCtx.fillStyle = '#6b4423';
     stripCtx.font = 'bold 28px "Playfair Display", serif';
     stripCtx.textAlign = 'center';
     stripCtx.fillText(headerText, stripWidth / 2, 45);
     
-    // Draw photos
     let loadedPhotos = 0;
     photoArray.forEach((photoObj, i) => {
         const img = new Image();
@@ -730,7 +688,6 @@ function createPhotoStripFromPhotos(photoArray) {
             stripCtx.lineWidth = 2;
             stripCtx.strokeRect(xPos, yPos, photoWidth, photoHeight);
             
-            // Add participant name under photo
             stripCtx.font = '10px "Libre Baskerville", serif';
             stripCtx.fillStyle = '#8b6914';
             stripCtx.fillText(photoObj.userName, xPos + photoWidth/2, yPos + photoHeight + 12);
@@ -738,7 +695,6 @@ function createPhotoStripFromPhotos(photoArray) {
             loadedPhotos++;
             
             if (loadedPhotos === photoArray.length) {
-                // Footer with date and session info
                 const date = new Date().toLocaleDateString('en-US', { 
                     year: 'numeric', 
                     month: 'long', 
@@ -752,17 +708,14 @@ function createPhotoStripFromPhotos(photoArray) {
                 stripCtx.font = '12px "Libre Baskerville", serif';
                 stripCtx.fillText(`Collaborative Session: ${currentSession}`, stripWidth / 2, stripHeight - 20);
                 
-                // Get unique participant names
                 const participants = [...new Set(photoArray.map(p => p.userName))];
                 stripCtx.font = '10px "Libre Baskerville", serif';
                 stripCtx.fillText(`With: ${participants.join(', ')}`, stripWidth / 2, stripHeight - 5);
                 
                 showScreen(resultsScreen);
                 
-                // Save collaborative strip data URL
                 const collabStripDataUrl = stripCanvas.toDataURL('image/jpeg', 0.95);
                 
-                // Share collaborative strip with all participants via Firebase
                 if (sessionRef && currentSession) {
                     sessionRef.child('collaborativeStrip').set({
                         stripData: collabStripDataUrl,
@@ -778,15 +731,12 @@ function createPhotoStripFromPhotos(photoArray) {
                     });
                 }
                 
-                // Hide regular collaborative button when showing collaborative strip
                 document.getElementById('createCollabStripBtn').style.display = 'none';
                 
-                // Show "View My Solo Strip" button if we have a solo strip saved
                 if (soloStripDataUrl) {
                     document.getElementById('viewSoloStripBtn').style.display = 'inline-block';
                 }
                 
-                // Show "End Session" button in collaborative mode
                 if (currentSession) {
                     document.getElementById('endSessionBtn').style.display = 'inline-block';
                 }
@@ -810,12 +760,10 @@ function applyStripBorder(borderStyle, stripWidth, stripHeight) {
     }
 }
 
-// Fallback local storage collaboration (original code)
 function initializeLocalSession(sessionCode) {
     currentSession = sessionCode;
     updateSessionData();
     
-    // Check for other participants periodically
     setInterval(() => {
         updateSessionData();
         checkForNewParticipants();
@@ -828,7 +776,6 @@ function updateSessionData() {
     const sessionKey = 'collab_session_' + currentSession;
     let sessionData = JSON.parse(localStorage.getItem(sessionKey) || '{}');
     
-    // Update this user's data
     sessionData[userId] = {
         lastActive: Date.now(),
         photoCount: photos.length,
@@ -845,7 +792,6 @@ function checkForNewParticipants() {
     const sessionKey = 'collab_session_' + currentSession;
     let sessionData = JSON.parse(localStorage.getItem(sessionKey) || '{}');
     
-    // Count active participants (last active within 30 seconds)
     const now = Date.now();
     const activeUsers = Object.entries(sessionData).filter(([id, data]) => 
         now - data.lastActive < 30000
@@ -853,7 +799,6 @@ function checkForNewParticipants() {
     
     participantCount = activeUsers.length;
     
-    // Update display
     const sessionDisplay = document.getElementById('sessionCodeDisplay');
     if (sessionDisplay && currentSession) {
         const userNames = activeUsers.map(([id, data]) => data.name || 'Guest').join(', ');
@@ -864,14 +809,12 @@ function checkForNewParticipants() {
     }
 }
 
-// Check for new photos from friends
 function checkForNewPhotos() {
     if (!currentSession) return;
     
     const sessionPhotosKey = 'collab_photos_' + currentSession;
     const allPhotos = JSON.parse(localStorage.getItem(sessionPhotosKey) || '[]');
     
-    // Find new photos from other users
     const newPhotos = allPhotos.filter(photo => 
         photo.userId !== userId && 
         !sessionPhotos.find(existing => 
@@ -889,7 +832,6 @@ function checkForNewPhotos() {
     }
 }
 
-// Show activity messages
 function showActivity(message) {
     const activityEl = document.getElementById('recentActivity');
     if (!activityEl) return;
@@ -899,12 +841,10 @@ function showActivity(message) {
     activityItem.textContent = message;
     activityEl.appendChild(activityItem);
     
-    // Remove old items
     while (activityEl.children.length > 2) {
         activityEl.removeChild(activityEl.firstChild);
     }
     
-    // Auto-clear
     setTimeout(() => {
         if (activityItem.parentNode) {
             activityItem.parentNode.removeChild(activityItem);
@@ -912,66 +852,37 @@ function showActivity(message) {
     }, 3000);
 }
 
-// Update collaboration UI
-function updateCollaborationUI() {
-    const collaborationStatus = document.getElementById('collaborationStatus');
-    const participantCountEl = document.getElementById('participantCount');
-    const sessionPhotosEl = document.getElementById('sessionPhotos');
-    
-    if (!collaborationStatus) return;
-
-    if (currentSession) {
-        collaborationStatus.style.display = 'block';
-        participantCountEl.textContent = `👥 ${participantCount} participant${participantCount !== 1 ? 's' : ''}`;
-        sessionPhotosEl.textContent = `📸 ${sessionPhotos.length} photos shared`;
-    } else {
-        collaborationStatus.style.display = 'none';
-    }
-}
-
-// Start collaboration monitoring
 function startCollaboration() {
     if (!currentSession) return;
     
-    // Update session data every 10 seconds
     setInterval(updateSessionData, 10000);
-    
-    // Check for new photos every 5 seconds
     setInterval(checkForNewPhotos, 5000);
     
-    // Initial update
     updateSessionData();
-    updateCollaborationUI();
+    updateCollaborativeUI();
 }
 
-// Performance optimization: throttle filter updates
-const FILTER_THROTTLE = 50; // ms
+const FILTER_THROTTLE = 50;
 let lastFilterTime = 0;
 
-// Low-res preview for performance
-const PREVIEW_SCALE = 0.5; // Render at 50% resolution for preview
+const PREVIEW_SCALE = 0.5;
 let previewCanvas = document.createElement('canvas');
 let previewCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
 
-// Voice synthesis
 function speak(text, instant = false) {
     if (!voiceEnabled || !window.speechSynthesis) return;
     
-    // Cancel any ongoing speech for instant messages
     if (instant) {
         speechSynthesis.cancel();
     }
     
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Use selected voice if available, otherwise use default
     if (selectedVoice) {
         utterance.voice = selectedVoice;
     } else {
-        // Fallback: Get available voices and select a better one
         const voices = speechSynthesis.getVoices();
         
-        // Prefer female voices with natural quality
         const preferredVoices = voices.filter(voice => 
             (voice.name.includes('Female') || 
              voice.name.includes('Samantha') || 
@@ -988,7 +899,6 @@ function speak(text, instant = false) {
         }
     }
     
-    // Slower, deeper, more dramatic voice
     utterance.rate = 0.85;
     utterance.pitch = 0.95;
     utterance.volume = 1.0;
@@ -996,14 +906,12 @@ function speak(text, instant = false) {
     speechSynthesis.speak(utterance);
 }
 
-// Load voices when available
 if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = () => {
         speechSynthesis.getVoices();
     };
 }
 
-// Utility: Generate session code (testable)
 function generateSessionCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -1013,14 +921,12 @@ function generateSessionCode() {
     return code;
 }
 
-// Gallery functions (with error handling)
 async function saveToGallery(photoData) {
     console.log('💾 saveToGallery called');
     console.log('   isGuest:', isGuest);
     console.log('   currentUser:', currentUser ? 'exists' : 'null');
     console.log('   currentUser.uid:', currentUser?.uid);
     
-    // Don't save for guests
     if (isGuest) {
         console.log('👤 Guest mode: Photo not saved to gallery');
         return;
@@ -1033,25 +939,20 @@ async function saveToGallery(photoData) {
     
     try {
         if (currentUser && !isGuest) {
-            // Logged in user: Save to Firebase Storage
             const photoId = Date.now();
             const photoRef = storage.ref(`users/${currentUser.uid}/gallery/${photoId}.jpg`);
             
             console.log('📤 Uploading to Firebase Storage:', `users/${currentUser.uid}/gallery/${photoId}.jpg`);
             
-            // Convert data URL to blob
             const response = await fetch(photoData);
             const blob = await response.blob();
             
-            // Upload to Firebase Storage
             await photoRef.put(blob);
             
             console.log('✅ Blob uploaded successfully');
             
-            // Get download URL
             const downloadURL = await photoRef.getDownloadURL();
             
-            // Save metadata to Realtime Database
             await database.ref(`users/${currentUser.uid}/gallery/${photoId}`).set({
                 timestamp: firebase.database.ServerValue.TIMESTAMP,
                 session: currentSession,
@@ -1060,7 +961,6 @@ async function saveToGallery(photoData) {
             
             console.log('✅ Photo saved to Firebase Storage and Database');
         } else {
-            // Fallback to localStorage (should not happen with auth)
             console.log('⚠️ Falling back to localStorage');
             let gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
             gallery.push({
@@ -1086,7 +986,6 @@ async function loadGallery() {
         let gallery = [];
         
         if (currentUser && !isGuest) {
-            // Load from Firebase for logged-in users
             const snapshot = await database.ref(`users/${currentUser.uid}/gallery`).once('value');
             const galleryData = snapshot.val();
             
@@ -1101,11 +1000,9 @@ async function loadGallery() {
             
             console.log(`📸 Loaded ${gallery.length} photos from Firebase`);
         } else if (isGuest) {
-            // Guest mode: No gallery
             grid.innerHTML = '<p style="text-align: center; grid-column: 1/-1; color: #8b6914;">👤 Guest Mode: Photos are not saved to gallery.<br>Sign in to save your photos!</p>';
             return;
         } else {
-            // Fallback to localStorage
             gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
         }
         
@@ -1116,7 +1013,6 @@ async function loadGallery() {
             return;
         }
         
-        // Sort by timestamp (newest first)
         gallery.sort((a, b) => b.timestamp - a.timestamp);
         
         gallery.forEach(item => {
@@ -1150,10 +1046,8 @@ window.deleteGalleryItem = async function(id) {
     }
     try {
         if (currentUser && !isGuest) {
-            // Delete from Firebase
             await database.ref(`users/${currentUser.uid}/gallery/${id}`).remove();
             
-            // Delete from Storage
             try {
                 await storage.ref(`users/${currentUser.uid}/gallery/${id}.jpg`).delete();
             } catch (storageError) {
@@ -1162,7 +1056,6 @@ window.deleteGalleryItem = async function(id) {
             
             console.log('✅ Photo deleted from Firebase');
         } else {
-            // Delete from localStorage
             let gallery = JSON.parse(localStorage.getItem('photoGallery') || '[]');
             gallery = gallery.filter(item => item.id !== parseInt(id));
             localStorage.setItem('photoGallery', JSON.stringify(gallery));
@@ -1174,14 +1067,12 @@ window.deleteGalleryItem = async function(id) {
     }
 };
 
-// Apply filter to live video preview (optimized for performance)
 function applyLiveFilter() {
     if (!video.videoWidth || !video.videoHeight) {
         animationId = requestAnimationFrame(applyLiveFilter);
         return;
     }
     
-    // Throttle updates for better performance
     const now = performance.now();
     if (now - lastFilterTime < FILTER_THROTTLE) {
         animationId = requestAnimationFrame(applyLiveFilter);
@@ -1189,24 +1080,20 @@ function applyLiveFilter() {
     }
     lastFilterTime = now;
     
-    // Use low-res preview for better performance
     const previewWidth = Math.floor(video.videoWidth * PREVIEW_SCALE);
     const previewHeight = Math.floor(video.videoHeight * PREVIEW_SCALE);
     
     previewCanvas.width = previewWidth;
     previewCanvas.height = previewHeight;
     
-    // Draw to low-res canvas
     previewCtx.drawImage(video, 0, 0, previewWidth, previewHeight);
     
-    // Apply filter to low-res version
     try {
         filters[currentFilter](previewCtx, previewWidth, previewHeight);
     } catch (error) {
         console.error('Filter error:', error);
     }
     
-    // Scale up to display canvas
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(previewCanvas, 0, 0, previewWidth, previewHeight, 0, 0, canvas.width, canvas.height);
@@ -1214,7 +1101,6 @@ function applyLiveFilter() {
     animationId = requestAnimationFrame(applyLiveFilter);
 }
 
-// Lighting detection (with error handling)
 function checkLighting() {
     if (!video.videoWidth) return;
     
@@ -1339,7 +1225,6 @@ const filters = {
     }
 };
 
-// Show screen
 function showScreen(screen) {
     [welcomeScreen, cameraAccessScreen, captureScreen, resultsScreen, galleryScreen].forEach(s => {
         s.classList.add('hidden');
@@ -1349,7 +1234,6 @@ function showScreen(screen) {
     screen.style.display = 'block';
 }
 
-// Initialize camera
 async function initCamera() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({ 
@@ -1357,7 +1241,6 @@ async function initCamera() {
         });
         video.srcObject = stream;
         
-        // Wait for video to be ready and actually playing
         video.onloadedmetadata = () => {
             video.play().then(() => {
                 console.log('Video is playing:', video.videoWidth, 'x', video.videoHeight);
@@ -1377,7 +1260,6 @@ async function initCamera() {
     }
 }
 
-// Flash effect
 function showFlash() {
     flash.style.display = 'block';
     flash.style.opacity = '1';
@@ -1387,73 +1269,59 @@ function showFlash() {
     }, 100);
 }
 
-// Take photo
 async function takePhoto() {
-    // Make sure video is ready
     if (!video.videoWidth || !video.videoHeight) {
         console.error('Video not ready');
         return;
     }
     
-    // Set canvas to video dimensions
     captureCanvas.width = video.videoWidth;
     captureCanvas.height = video.videoHeight;
     
-    // Draw the current video frame
     captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
     
-    // Apply the current filter
     try {
         filters[currentFilter](captureCtx, captureCanvas.width, captureCanvas.height);
     } catch (error) {
         console.error('Filter application error:', error);
     }
     
-    // Convert to image data
     const photoData = captureCanvas.toDataURL('image/jpeg', 0.9);
     
-    // Save the photo
     photos.push(photoData);
     
-    // Save to gallery (await it to ensure it completes)
     try {
         await saveToGallery(photoData);
     } catch (error) {
         console.error('Error saving to gallery:', error);
     }
     
-    // Share with collaborative session
     if (currentSession) {
         sharePhotoWithSession(photoData);
     }
     
-    // Show flash effect
     showFlash();
     
     console.log('Photo captured successfully!', photos.length);
 }
 
-// Photo sequence
 async function startPhotoSequence() {
     console.log('Starting photo sequence...');
     photos = [];
     
-    // Get selected number of photos
     const photoCountElement = document.getElementById('photoCountSelect');
     let selectedTotalPhotos = parseInt(photoCountElement.value);
     console.log('Selected total photos:', selectedTotalPhotos);
     
     if (isNaN(selectedTotalPhotos) || selectedTotalPhotos < 2 || selectedTotalPhotos > 4) {
         console.error('Invalid photo count:', selectedTotalPhotos);
-        selectedTotalPhotos = 4; // Default fallback
+        selectedTotalPhotos = 4;
         console.log('Using default:', selectedTotalPhotos);
     }
     
-    // Calculate photos per participant in collaborative session
     if (currentSession) {
         const participantCount = Object.keys(connectedUsers).length || 1;
         
-        // Each participant takes equal photos - round up to ensure we get at least the selected number
         totalPhotos = Math.ceil(selectedTotalPhotos / participantCount);
         
         console.log(`👥 ${participantCount} participants, ${selectedTotalPhotos} total photos selected`);
@@ -1461,17 +1329,14 @@ async function startPhotoSequence() {
         
         if (isHost) {
             showNotification(`Each of the ${participantCount} participants will take ${totalPhotos} photo(s)!`);
-            // Send command to all participants with the number of photos they should take
             sendHostCommand('capture', { totalPhotos: totalPhotos });
         }
     } else {
-        // Non-collaborative: use selected number
         totalPhotos = selectedTotalPhotos;
     }
     
     document.getElementById('captureBtn').disabled = true;
     
-    // Announce start immediately
     speak('Get ready, darling! Strike a pose!', true);
     await new Promise(resolve => setTimeout(resolve, 2000));
     
@@ -1479,12 +1344,10 @@ async function startPhotoSequence() {
         console.log(`Capturing photo ${i + 1} of ${totalPhotos}`);
         photoCount.textContent = `Photo ${i + 1} of ${totalPhotos}`;
         
-        // Countdown
         for (let j = 3; j > 0; j--) {
             countdown.textContent = j;
             countdown.style.display = 'flex';
             
-            // Speak and show number simultaneously
             if (j === 3) speak('Three', true);
             else if (j === 2) speak('Two', true);
             else if (j === 1) speak('One', true);
@@ -1492,7 +1355,6 @@ async function startPhotoSequence() {
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
-        // Take photo
         countdown.textContent = '📷';
         countdown.style.display = 'flex';
         speak('Gorgeous!', true);
@@ -1504,7 +1366,6 @@ async function startPhotoSequence() {
         await new Promise(resolve => setTimeout(resolve, 300));
         countdown.style.display = 'none';
         
-        // Pause between photos with encouragement
         if (i < totalPhotos - 1) {
             const encouragements = [
                 'Fabulous! Next pose!',
@@ -1521,27 +1382,21 @@ async function startPhotoSequence() {
     document.getElementById('captureBtn').disabled = false;
     
     if (photos.length > 0) {
-        // Always create solo strip first to save soloStripDataUrl
         photoCount.textContent = 'Creating your strip...';
         speak('Your photos are absolutely stunning, darling!', true);
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Create solo strip (this saves soloStripDataUrl)
         await new Promise((resolve) => {
             createPhotoStrip();
-            // Give it a moment to render
             setTimeout(resolve, 500);
         });
         
-        // In collaborative mode, auto-create and show collaborative strip
         if (currentSession && sessionPhotos.length > 0) {
             photoCount.textContent = 'Creating collaborative strip with everyone...';
             speak('Wonderful! Creating collaborative strip, darling!', true);
             
-            // Wait for other participants' photos to fully sync
             await new Promise(resolve => setTimeout(resolve, 2000));
             
-            // Automatically create and show collaborative strip
             console.log('🎉 Auto-creating collaborative strip...');
             await createCollaborativeStrip();
         }
@@ -1552,7 +1407,6 @@ async function startPhotoSequence() {
     }
 }
 
-// Create strip
 function createPhotoStrip() {
     const headerText = document.getElementById('headerText').value || 'VINTAGE MEMORIES';
     const layout = document.getElementById('layoutStyle').value;
@@ -1564,9 +1418,7 @@ function createPhotoStrip() {
     const headerHeight = 70;
     const footerHeight = 50;
     
-    // Configure layout dimensions based on number of photos
     if (layout === 'wide' || layout === 'postcard') {
-        // Grid layout
         if (numPhotos === 2) {
             columns = 2;
             rows = 1;
@@ -1589,7 +1441,6 @@ function createPhotoStrip() {
         }
         stripHeight = headerHeight + (photoHeight * rows) + (spacing * (rows + 1)) + footerHeight;
     } else {
-        // Classic vertical layout
         stripWidth = 400;
         photoWidth = 370;
         photoHeight = 280;
@@ -1601,11 +1452,9 @@ function createPhotoStrip() {
     stripCanvas.width = stripWidth;
     stripCanvas.height = stripHeight;
     
-    // Background
     stripCtx.fillStyle = '#faf8f5';
     stripCtx.fillRect(0, 0, stripWidth, stripHeight);
     
-    // Border decoration based on style
     if (borderStyle === 'ornate') {
         stripCtx.strokeStyle = '#8b6914';
         stripCtx.lineWidth = 8;
@@ -1614,7 +1463,6 @@ function createPhotoStrip() {
         stripCtx.lineWidth = 3;
         stripCtx.strokeRect(15, 15, stripWidth - 30, stripHeight - 30);
         
-        // Add corner decorations
         const corners = [[20, 20], [stripWidth - 20, 20], [20, stripHeight - 20], [stripWidth - 20, stripHeight - 20]];
         stripCtx.fillStyle = '#c4a747';
         corners.forEach(([x, y]) => {
@@ -1635,31 +1483,26 @@ function createPhotoStrip() {
         stripCtx.lineWidth = 4;
         stripCtx.strokeRect(12, 12, stripWidth - 24, stripHeight - 24);
     } else if (borderStyle === 'vintage') {
-        // Vintage scalloped edge effect
         stripCtx.strokeStyle = '#8b6914';
         stripCtx.lineWidth = 6;
         stripCtx.strokeRect(10, 10, stripWidth - 20, stripHeight - 20);
         
-        // Inner decorative line
         stripCtx.strokeStyle = '#c4a747';
         stripCtx.lineWidth = 1;
         stripCtx.setLineDash([3, 3]);
         stripCtx.strokeRect(18, 18, stripWidth - 36, stripHeight - 36);
         stripCtx.setLineDash([]);
     } else if (borderStyle === 'filmstrip') {
-        // Film strip perforations
         stripCtx.fillStyle = '#8b6914';
         stripCtx.fillRect(0, 0, 15, stripHeight);
         stripCtx.fillRect(stripWidth - 15, 0, 15, stripHeight);
         
-        // Add perforations
         stripCtx.fillStyle = '#faf8f5';
         for (let y = 10; y < stripHeight - 10; y += 20) {
             stripCtx.fillRect(3, y, 9, 12);
             stripCtx.fillRect(stripWidth - 12, y, 9, 12);
         }
     } else if (borderStyle === 'elegant') {
-        // Elegant double border
         stripCtx.strokeStyle = '#6b4423';
         stripCtx.lineWidth = 2;
         stripCtx.strokeRect(8, 8, stripWidth - 16, stripHeight - 16);
@@ -1673,13 +1516,11 @@ function createPhotoStrip() {
         stripCtx.strokeRect(20, 20, stripWidth - 40, stripHeight - 40);
     }
     
-    // Header
     stripCtx.fillStyle = '#6b4423';
     stripCtx.font = 'bold 28px "Playfair Display", serif';
     stripCtx.textAlign = 'center';
     stripCtx.fillText(headerText, stripWidth / 2, 45);
     
-    // Draw photos based on layout
     let loadedPhotos = 0;
     
     photos.forEach((photoData, i) => {
@@ -1689,11 +1530,9 @@ function createPhotoStrip() {
             let xPos, yPos;
             
             if (columns === 1) {
-                // Classic vertical layout
                 xPos = (stripWidth - photoWidth) / 2;
                 yPos = headerHeight + spacing + (i * (photoHeight + spacing));
             } else {
-                // Grid layout
                 const col = i % columns;
                 const row = Math.floor(i / columns);
                 const totalPhotoWidth = (photoWidth * columns) + (spacing * (columns - 1));
@@ -1726,12 +1565,10 @@ function createPhotoStrip() {
                     stripCtx.fillText(`Session: ${currentSession}`, stripWidth / 2, stripHeight - 5);
                 }
                 
-                // Save solo strip data URL for later viewing
                 soloStripDataUrl = stripCanvas.toDataURL('image/jpeg', 0.95);
                 
                 showScreen(resultsScreen);
                 
-                // Hide collaborative strip button and solo strip button initially
                 document.getElementById('createCollabStripBtn').style.display = 'none';
                 document.getElementById('viewSoloStripBtn').style.display = 'none';
             }
@@ -1739,7 +1576,6 @@ function createPhotoStrip() {
     });
 }
 
-// Download functions (with staggered downloads for multiple photos)
 function downloadStrip() {
     const link = document.createElement('a');
     link.download = `vintage-photobooth-${Date.now()}.jpg`;
@@ -1754,21 +1590,18 @@ function downloadAllPhotos() {
             link.download = `photo-${i + 1}-${Date.now()}.jpg`;
             link.href = photo;
             link.click();
-        }, i * 200); // Stagger downloads by 200ms
+        }, i * 200);
     });
 }
 
-// Reset (with proper cleanup)
 function resetSession() {
-    console.log('🔄 Resetting session...');
+    console.log('📄 Resetting session...');
     
-    // Clear all photo-related data
     photos = [];
     sessionPhotos = [];
     soloStripDataUrl = null;
     photoCount.textContent = '';
     
-    // Clear session data
     currentSession = null;
     sessionCodeDisplay.textContent = '';
     isHost = false;
@@ -1776,7 +1609,6 @@ function resetSession() {
     connectedUsers = {};
     participantCount = 1;
     
-    // Detach Firebase listeners if session exists
     if (sessionRef) {
         console.log('🗑️ Cleaning up Firebase listeners');
         sessionRef.child('users').off();
@@ -1787,7 +1619,6 @@ function resetSession() {
         sessionRef = null;
     }
     
-    // Cleanup resources
     if (animationId) {
         cancelAnimationFrame(animationId);
         animationId = null;
@@ -1801,7 +1632,6 @@ function resetSession() {
         stream = null;
     }
     
-    // Clear canvases
     if (canvas.width > 0) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
@@ -1813,19 +1643,16 @@ function resetSession() {
     showScreen(welcomeScreen);
 }
 
-// End collaborative session - saves collaborative strip for logged-in users
 async function endCollaborativeSession() {
-    console.log('🏁 Ending collaborative session...');
+    console.log('🎬 Ending collaborative session...');
     
     if (!currentSession) {
         console.warn('No active session to end');
         return;
     }
     
-    // Get the current collaborative strip from canvas
     const collabStripDataUrl = stripCanvas.toDataURL('image/jpeg', 0.95);
     
-    // Save to gallery for logged-in users (not guests)
     if (currentUser && !isGuest) {
         console.log('💾 Saving collaborative strip to gallery...');
         try {
@@ -1839,7 +1666,6 @@ async function endCollaborativeSession() {
         showNotification('ℹ️ Guest mode - collaborative strip not saved to gallery');
     }
     
-    // Send end session command if host
     if (isHost && sessionRef) {
         console.log('📢 Broadcasting session end to all participants...');
         sessionRef.child('sessionEnded').set({
@@ -1849,10 +1675,8 @@ async function endCollaborativeSession() {
         });
     }
     
-    // Show both strips to user before resetting
     showNotification('🎉 Session ended! Your photos are ready.');
     
-    // Wait a moment, then reset
     setTimeout(() => {
         resetSession();
     }, 2000);
@@ -1884,7 +1708,6 @@ document.getElementById('emailSignUpBtn').addEventListener('click', () => {
 });
 
 document.getElementById('continueAsGuestBtn').addEventListener('click', continueAsGuest);
-
 document.getElementById('logoutBtn').addEventListener('click', logout);
 
 // Navigation event listeners
@@ -1896,64 +1719,19 @@ document.getElementById('startSoloBtn').addEventListener('click', () => {
 document.getElementById('createCollabBtn').addEventListener('click', () => {
     currentSession = generateSessionCode();
     
-    // Clear any old session data from Firebase before creating new session
     if (database && currentSession) {
         console.log('🗑️ Clearing old session data for:', currentSession);
         database.ref('sessions/' + currentSession).remove().then(() => {
             console.log('✅ Old session data cleared');
-            // Now initialize the fresh session
-            initializeFirebaseSession(currentSession, true); // Pass true to mark as host
-            
-            const sessionCodeText = document.getElementById('sessionCodeText');
-            const copyCodeBtn = document.getElementById('copyCodeBtn');
-            
-            console.log('🔍 DEBUG - Creating session as HOST');
-            console.log('🔍 sessionCodeText element:', sessionCodeText);
-            console.log('🔍 copyCodeBtn element:', copyCodeBtn);
-            
-            if (sessionCodeText) {
-                sessionCodeText.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
-                console.log('✅ Session code text updated');
-            }
-            if (copyCodeBtn) {
-                copyCodeBtn.style.display = 'inline-block';
-                console.log('✅ Copy button made visible!');
-            } else {
-                console.error('❌ Copy button not found in DOM!');
-            }
-            
+            initializeFirebaseSession(currentSession, true);
             showScreen(cameraAccessScreen);
         }).catch((error) => {
             console.warn('⚠️ Could not clear old session:', error);
-            // Continue anyway with fresh session
             initializeFirebaseSession(currentSession, true);
-            
-            const sessionCodeText = document.getElementById('sessionCodeText');
-            const copyCodeBtn = document.getElementById('copyCodeBtn');
-            
-            if (sessionCodeText) {
-                sessionCodeText.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
-            }
-            if (copyCodeBtn) {
-                copyCodeBtn.style.display = 'inline-block';
-            }
-            
             showScreen(cameraAccessScreen);
         });
     } else {
-        // Firebase not available, proceed normally
         initializeFirebaseSession(currentSession, true);
-        
-        const sessionCodeText = document.getElementById('sessionCodeText');
-        const copyCodeBtn = document.getElementById('copyCodeBtn');
-        
-        if (sessionCodeText) {
-            sessionCodeText.innerHTML = `👑 You're the host! Share code: <strong>${currentSession}</strong>`;
-        }
-        if (copyCodeBtn) {
-            copyCodeBtn.style.display = 'inline-block';
-        }
-        
         showScreen(cameraAccessScreen);
     }
 });
@@ -1961,18 +1739,7 @@ document.getElementById('createCollabBtn').addEventListener('click', () => {
 document.getElementById('joinSessionBtn').addEventListener('click', () => {
     const code = document.getElementById('sessionCodeInput').value.toUpperCase();
     if (code.length === 6) {
-        initializeFirebaseSession(code, false); // Pass false for participants
-        
-        const sessionCodeText = document.getElementById('sessionCodeText');
-        const copyCodeBtn = document.getElementById('copyCodeBtn');
-        
-        if (sessionCodeText) {
-            sessionCodeText.innerHTML = `Joining session: <strong>${code}</strong>`;
-        }
-        if (copyCodeBtn) {
-            copyCodeBtn.style.display = 'none'; // Hide copy button for participants
-        }
-        
+        initializeFirebaseSession(code, false);
         showScreen(cameraAccessScreen);
     } else {
         alert('Please enter a valid 6-character session code');
@@ -1991,7 +1758,6 @@ document.getElementById('createCollabStripBtn').addEventListener('click', async 
 document.getElementById('viewSoloStripBtn').addEventListener('click', () => {
     console.log('Showing solo strip...');
     if (soloStripDataUrl) {
-        // Load the saved solo strip back onto the canvas
         const img = new Image();
         img.src = soloStripDataUrl;
         img.onload = () => {
@@ -2000,7 +1766,6 @@ document.getElementById('viewSoloStripBtn').addEventListener('click', () => {
             stripCtx.clearRect(0, 0, stripCanvas.width, stripCanvas.height);
             stripCtx.drawImage(img, 0, 0);
             
-            // Hide solo strip button, show collaborative strip button
             document.getElementById('viewSoloStripBtn').style.display = 'none';
             document.getElementById('endSessionBtn').style.display = 'none';
             if (currentSession && sessionPhotos.length > 0) {
@@ -2028,79 +1793,57 @@ document.getElementById('backFromGalleryBtn').addEventListener('click', () => {
     showScreen(welcomeScreen);
 });
 
-// Copy session code to clipboard
+// UPDATED: Copy session code to clipboard - NOW WORKING
 document.getElementById('copyCodeBtn').addEventListener('click', async () => {
     const copyBtn = document.getElementById('copyCodeBtn');
     const sessionCode = currentSession;
     
     if (!sessionCode) {
-        alert('No session code to copy');
+        console.warn('No session code to copy');
         return;
     }
     
     try {
-        // Try modern clipboard API first
         if (navigator.clipboard && navigator.clipboard.writeText) {
             await navigator.clipboard.writeText(sessionCode);
-            
-            // Visual feedback
-            const originalText = copyBtn.innerHTML;
-            copyBtn.innerHTML = '✅ Copied!';
-            copyBtn.classList.add('copied');
-            
-            setTimeout(() => {
-                copyBtn.innerHTML = originalText;
-                copyBtn.classList.remove('copied');
-            }, 2000);
-            
-            console.log('📋 Session code copied:', sessionCode);
+            console.log('Session code copied:', sessionCode);
         } else {
-            // Fallback for older browsers
             const textArea = document.createElement('textarea');
             textArea.value = sessionCode;
             textArea.style.position = 'fixed';
             textArea.style.left = '-999999px';
             document.body.appendChild(textArea);
             textArea.select();
-            
-            try {
-                document.execCommand('copy');
-                
-                // Visual feedback
-                const originalText = copyBtn.innerHTML;
-                copyBtn.innerHTML = '✅ Copied!';
-                copyBtn.classList.add('copied');
-                
-                setTimeout(() => {
-                    copyBtn.innerHTML = originalText;
-                    copyBtn.classList.remove('copied');
-                }, 2000);
-                
-                console.log('📋 Session code copied (fallback):', sessionCode);
-            } catch (err) {
-                console.error('Failed to copy:', err);
-                alert('Failed to copy. Code: ' + sessionCode);
-            }
-            
+            document.execCommand('copy');
             document.body.removeChild(textArea);
+            console.log('Session code copied (fallback):', sessionCode);
         }
+        
+        const originalText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '✅ Copied!';
+        copyBtn.classList.add('copied');
+        
+        setTimeout(() => {
+            copyBtn.innerHTML = originalText;
+            copyBtn.classList.remove('copied');
+        }, 2000);
+        
+        showNotification(`Session code ${sessionCode} copied to clipboard!`);
+        
     } catch (err) {
         console.error('Failed to copy session code:', err);
         alert('Failed to copy. Session code: ' + sessionCode);
     }
 });
 
-
 document.getElementById('clearGalleryBtn').addEventListener('click', async () => {
     if (confirm('Are you sure you want to clear your entire gallery?')) {
         try {
             if (currentUser && !isGuest) {
-                // Clear Firebase gallery
                 const snapshot = await database.ref(`users/${currentUser.uid}/gallery`).once('value');
                 const gallery = snapshot.val();
                 
                 if (gallery) {
-                    // Delete all photos from Storage
                     for (const photoId in gallery) {
                         try {
                             await storage.ref(`users/${currentUser.uid}/gallery/${photoId}.jpg`).delete();
@@ -2109,12 +1852,10 @@ document.getElementById('clearGalleryBtn').addEventListener('click', async () =>
                         }
                     }
                     
-                    // Delete all metadata from database
                     await database.ref(`users/${currentUser.uid}/gallery`).remove();
                     console.log('✅ Gallery cleared from Firebase');
                 }
             } else {
-                // Clear localStorage
                 localStorage.removeItem('photoGallery');
             }
             loadGallery();
@@ -2131,7 +1872,6 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentFilter = btn.dataset.filter;
-        // The live preview will automatically update with the new filter
     });
 });
 
