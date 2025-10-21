@@ -1278,7 +1278,11 @@ async function takePhoto() {
     captureCanvas.width = video.videoWidth;
     captureCanvas.height = video.videoHeight;
     
-    captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+    // Flip horizontally to un-mirror the image for final capture
+    captureCtx.save();
+    captureCtx.scale(-1, 1);
+    captureCtx.drawImage(video, -captureCanvas.width, 0, captureCanvas.width, captureCanvas.height);
+    captureCtx.restore();
     
     try {
         filters[currentFilter](captureCtx, captureCanvas.width, captureCanvas.height);
