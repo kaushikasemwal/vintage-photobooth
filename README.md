@@ -1,4 +1,4 @@
-# 📸 Vintage PhotoBooth
+# 📸 EchoLens (A Vintage PhotoBooth)
 
 A charming web-based photobooth that captures your memories with authentic vintage film aesthetics! Create beautiful photo strips with classic filters, collaborate with friends, and save your photos to the cloud.
 
